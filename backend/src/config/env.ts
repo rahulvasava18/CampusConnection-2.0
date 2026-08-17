@@ -64,6 +64,17 @@ const envSchema = z.object({
     .transform((value) => value === 'true'),
   COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
+  EMAIL_PROVIDER: z.enum(['smtp', 'resend']).default('smtp'),
+  EMAIL_API_URL: z.string().url().default('https://api.resend.com/emails'),
+  EMAIL_API_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  EMAIL_FROM: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  EMAIL_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   SMTP_HOST: z.string().min(1).default('smtp.gmail.com'),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.preprocess(
@@ -138,6 +149,12 @@ export function getEnv(): AppEnv {
       throw new Error(
         'JWT_ACCESS_PRIVATE_KEY_FILE and JWT_ACCESS_PUBLIC_KEY_FILE are only supported outside production.',
       );
+    }
+    if (parsed.EMAIL_PROVIDER !== 'resend') {
+      throw new Error('EMAIL_PROVIDER must be resend in production.');
+    }
+    if (!parsed.EMAIL_API_KEY || !parsed.EMAIL_FROM) {
+      throw new Error('EMAIL_API_KEY and EMAIL_FROM are required when EMAIL_PROVIDER=resend.');
     }
   }
   if (parsed.NODE_ENV === 'production' && !parsed.COOKIE_SECURE) {

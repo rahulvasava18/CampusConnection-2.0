@@ -115,6 +115,7 @@ const feedEvents = new Set<EventType>([
   'COMMUNITY_JOINED',
   'PROJECT_SHOWCASED',
 ]);
+const emailEvents = new Set<EventType>(['VERIFICATION_EMAIL_REQUESTED']);
 
 export async function routeDomainEvent(job: EventJobPayload): Promise<void> {
   const envelope = await OutboxEventModel.findOne({ eventId: job.eventId }).lean().exec();
@@ -143,6 +144,9 @@ export async function routeDomainEvent(job: EventJobPayload): Promise<void> {
         ? [{ queue: QUEUES.recommendation, name: 'recommendation-event' }]
         : []),
       ...(feedEvents.has(job.eventType) ? [{ queue: QUEUES.feed, name: 'feed-event' }] : []),
+      ...(emailEvents.has(job.eventType)
+        ? [{ queue: QUEUES.email, name: 'verification-email' }]
+        : []),
       { queue: QUEUES.analytics, name: 'analytics-event' },
     ];
     for (const target of queues) {

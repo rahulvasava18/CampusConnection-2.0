@@ -1,4 +1,5 @@
 export type EventType =
+  | 'VERIFICATION_EMAIL_REQUESTED'
   | 'USER_REGISTERED'
   | 'USER_LOGGED_IN'
   | 'USER_VERIFIED'

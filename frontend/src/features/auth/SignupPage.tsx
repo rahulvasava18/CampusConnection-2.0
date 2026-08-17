@@ -41,7 +41,7 @@ export function SignupPage() {
     setError(null);
     try {
       const result = await resendVerification({ identifier: form.email });
-      setNotice(`A new verification email was sent to ${result.email}.`);
+      setNotice(`A new verification email was queued for ${result.email}.`);
     } catch (requestError) {
       const authError = requestError instanceof ApiRequestError ? requestError : undefined;
       setError(authError?.message ?? 'Unable to resend the verification email.');
@@ -75,8 +75,8 @@ export function SignupPage() {
           </span>
           <h3 className="type-display mt-6 text-2xl font-bold text-ink">Verify {form.email}</h3>
           <p className="mt-3 text-sm leading-6 text-muted">
-            We sent a verification link to this address. It expires in 30 minutes and must be used
-            before you can log in.
+            Account created. Please check your email to verify your account. The verification link
+            expires in 30 minutes and must be used before you can log in.
           </p>
           {error ? (
             <div className="mt-5 text-left">

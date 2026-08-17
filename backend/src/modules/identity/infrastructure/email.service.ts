@@ -6,10 +6,18 @@ export interface VerificationEmailInput {
   to: string;
   displayName: string;
   token: string;
+  idempotencyKey?: string;
 }
 
 export interface EmailService {
   sendVerificationEmail(input: VerificationEmailInput): Promise<void>;
+}
+
+export class EmailDeliveryError extends Error {
+  public constructor(message: string, public readonly retryable: boolean) {
+    super(message);
+    this.name = 'EmailDeliveryError';
+  }
 }
 
 export class GmailEmailService implements EmailService {
@@ -37,23 +45,92 @@ export class GmailEmailService implements EmailService {
         'Email delivery is not configured for this environment.',
         503,
       );
-    const verificationUrl = `${env.FRONTEND_URL.replace(/\/$/, '')}/verify-email?token=${encodeURIComponent(input.token)}`;
     await this.transporter.sendMail({
       from: env.SMTP_FROM,
       to: input.to,
-      subject: 'Verify your CampusConnection email',
-      text: [
-        `Welcome to CampusConnection, ${input.displayName}.`,
-        '',
-        'Verify your email to activate your CampusConnection account:',
-        verificationUrl,
-        '',
-        'This verification link expires in 30 minutes.',
-        'If you did not create this account, you can safely ignore this email.',
-      ].join('\n'),
-      html: verificationEmailHtml(input.displayName, verificationUrl),
+      ...verificationEmailMessage(input),
     });
   }
+}
+
+export interface HttpEmailServiceOptions {
+  endpoint: string;
+  apiKey: string;
+  from: string;
+  timeoutMs: number;
+  fetchImplementation?: typeof fetch;
+}
+
+export class HttpEmailService implements EmailService {
+  private readonly fetchImplementation: typeof fetch;
+
+  public constructor(private readonly options: HttpEmailServiceOptions) {
+    this.fetchImplementation = options.fetchImplementation ?? fetch;
+  }
+
+  public async sendVerificationEmail(input: VerificationEmailInput): Promise<void> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.options.timeoutMs);
+    try {
+      const response = await this.fetchImplementation(this.options.endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.options.apiKey}`,
+          'Content-Type': 'application/json',
+          ...(input.idempotencyKey ? { 'Idempotency-Key': input.idempotencyKey } : {}),
+        },
+        body: JSON.stringify({ to: [input.to], ...verificationEmailMessage(input, this.options.from) }),
+        signal: controller.signal,
+      });
+      if (response.ok) return;
+      const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+      throw new EmailDeliveryError(
+        retryable ? 'Email provider is temporarily unavailable.' : 'Email provider rejected the message.',
+        retryable,
+      );
+    } catch (error) {
+      if (error instanceof EmailDeliveryError) throw error;
+      throw new EmailDeliveryError('Email provider request failed.', true);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+export function createEmailService(): EmailService {
+  const env = getEnv();
+  if (env.EMAIL_PROVIDER === 'resend') {
+    if (!env.EMAIL_API_KEY || !env.EMAIL_FROM)
+      throw new EmailDeliveryError('Email delivery provider is not configured.', false);
+    return new HttpEmailService({
+      endpoint: env.EMAIL_API_URL,
+      apiKey: env.EMAIL_API_KEY,
+      from: env.EMAIL_FROM,
+      timeoutMs: env.EMAIL_HTTP_TIMEOUT_MS,
+    });
+  }
+  return new GmailEmailService();
+}
+
+function verificationEmailMessage(
+  input: VerificationEmailInput,
+  from?: string,
+): { from?: string; subject: string; text: string; html: string } {
+  const verificationUrl = `${getEnv().FRONTEND_URL.replace(/\/$/, '')}/verify-email?token=${encodeURIComponent(input.token)}`;
+  return {
+    ...(from ? { from } : {}),
+    subject: 'Verify your CampusConnection email',
+    text: [
+      `Welcome to CampusConnection, ${input.displayName}.`,
+      '',
+      'Verify your email to activate your CampusConnection account:',
+      verificationUrl,
+      '',
+      'This verification link expires in 30 minutes.',
+      'If you did not create this account, you can safely ignore this email.',
+    ].join('\n'),
+    html: verificationEmailHtml(input.displayName, verificationUrl),
+  };
 }
 
 function verificationEmailHtml(displayName: string, verificationUrl: string): string {

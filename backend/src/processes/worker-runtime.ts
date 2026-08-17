@@ -23,6 +23,7 @@ import { DeadLetterModel } from '../infrastructure/events/event-processing.model
 import { logger } from '../shared/logging/logger';
 import { getEnv } from '../config/env';
 import { handleRecommendationRefreshJob } from '../modules/intelligence/application/recommendation.worker';
+import { handleVerificationEmailJob } from '../infrastructure/queue/email.handlers';
 
 type AnyJob = Job<unknown>;
 
@@ -114,13 +115,7 @@ export async function createWorkerRuntime(): Promise<WorkerRuntime> {
     ),
     createWorker(
       QUEUES.email,
-      safeProcessor(async (job) => {
-        logger.info(
-          { jobId: job.id, queue: QUEUES.email },
-          'Email delivery abstraction received a job; provider dispatch is deferred',
-        );
-        return { status: 'deferred' };
-      }),
+      safeProcessor(handleVerificationEmailJob),
       1,
     ),
     createWorker(

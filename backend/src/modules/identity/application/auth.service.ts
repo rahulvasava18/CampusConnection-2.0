@@ -25,9 +25,7 @@ import {
   SecurityAuditRepository,
 } from '../infrastructure/identity.repositories';
 import { type UserDocument } from '../infrastructure/user.model';
-import type { PendingSignupDocument } from '../infrastructure/pending-signup.model';
 import { toUserView } from './user.mapper';
-import { GmailEmailService, type EmailService } from '../infrastructure/email.service';
 import type { AuthContext, RequestMeta } from '../interfaces/auth.types';
 
 export interface ProfileUpdateInput {
@@ -55,7 +53,6 @@ interface ServiceDependencies {
   users?: UserRepository;
   emailVerifications?: EmailVerificationRepository;
   pendingSignups?: PendingSignupRepository;
-  emailService?: EmailService;
   sessions?: SessionRepository;
   audits?: SecurityAuditRepository;
   events?: OutboxEventPublisher;
@@ -66,7 +63,6 @@ export class AuthService {
   private readonly users: UserRepository;
   private readonly emailVerifications: EmailVerificationRepository;
   private readonly pendingSignups: PendingSignupRepository;
-  private readonly emailService: EmailService;
   private readonly sessions: SessionRepository;
   private readonly audits: SecurityAuditRepository;
   private readonly events: OutboxEventPublisher;
@@ -76,7 +72,6 @@ export class AuthService {
     this.users = dependencies.users ?? new UserRepository();
     this.emailVerifications = dependencies.emailVerifications ?? new EmailVerificationRepository();
     this.pendingSignups = dependencies.pendingSignups ?? new PendingSignupRepository();
-    this.emailService = dependencies.emailService ?? new GmailEmailService();
     this.sessions = dependencies.sessions ?? new SessionRepository();
     this.audits = dependencies.audits ?? new SecurityAuditRepository();
     this.events = dependencies.events ?? new OutboxEventPublisher();
@@ -91,9 +86,9 @@ export class AuthService {
     const email = normalizeEmail(input.email);
     const username = normalizeUsername(input.username);
     const passwordHash = await hashPassword(input.password);
-    let pending: { signup: PendingSignupDocument; token: string };
+    const correlationId = meta.correlationId ?? meta.requestId ?? randomUUID();
     try {
-      pending = await this.transaction(async (session) => {
+      await this.transaction(async (session) => {
         const existing = await this.users.findByEmail(email, session);
         const usernameOwner = await this.users.findByUsername(username, session);
         if (usernameOwner)
@@ -117,7 +112,21 @@ export class AuthService {
           },
           session,
         );
-        return { signup, token };
+        await this.events.record(
+          {
+            eventType: 'VERIFICATION_EMAIL_REQUESTED',
+            producer: 'identity',
+            aggregateType: 'PendingSignup',
+            aggregateId: signup.id,
+            correlationId,
+            payload: {
+              to: email,
+              displayName: signup.displayName,
+              token,
+            },
+          },
+          session,
+        );
       });
     } catch (error) {
       if (isDuplicateKeyError(error))
@@ -127,33 +136,6 @@ export class AuthService {
           409,
         );
       throw error;
-    }
-    try {
-      await this.emailService.sendVerificationEmail({
-        to: email,
-        displayName: pending.signup.displayName,
-        token: pending.token,
-      });
-    } catch (error) {
-      logger.warn(
-        { err: error, pendingSignupId: pending.signup.id },
-        'Verification email delivery failed',
-      );
-      try {
-        await this.transaction((session) =>
-          this.pendingSignups.deleteById(pending.signup._id, session),
-        );
-      } catch (cleanupError) {
-        logger.error(
-          { err: cleanupError, pendingSignupId: pending.signup.id },
-          'Pending signup cleanup failed after email delivery failure',
-        );
-      }
-      throw new AppError(
-        'VERIFICATION_EMAIL_SEND_FAILED',
-        "We couldn't send the verification email. Please try again.",
-        503,
-      );
     }
     return { email };
   }
@@ -196,7 +178,7 @@ export class AuthService {
               aggregateId: legacyUser.id,
               actorId: legacyUser.id,
               correlationId: meta.correlationId ?? meta.requestId ?? randomUUID(),
-              payload: { userId: legacyUser.id, verificationMethod: 'smtp' },
+              payload: { userId: legacyUser.id, verificationMethod: 'email' },
             },
             session,
           );
@@ -260,7 +242,7 @@ export class AuthService {
             aggregateId: user.id,
             actorId: user.id,
             correlationId,
-            payload: { userId: user.id, verificationMethod: 'smtp' },
+            payload: { userId: user.id, verificationMethod: 'email' },
           },
           session,
         );
@@ -292,24 +274,22 @@ export class AuthService {
           new Date(Date.now() + 30 * 60 * 1000),
           session,
         );
+        await this.events.record(
+          {
+            eventType: 'VERIFICATION_EMAIL_REQUESTED',
+            producer: 'identity',
+            aggregateType: 'PendingSignup',
+            aggregateId: pendingSignup.id,
+            correlationId: meta.correlationId ?? meta.requestId ?? randomUUID(),
+            payload: {
+              to: pendingSignup.emailNormalized,
+              displayName: pendingSignup.displayName,
+              token,
+            },
+          },
+          session,
+        );
       });
-      try {
-        await this.emailService.sendVerificationEmail({
-          to: pendingSignup.emailNormalized,
-          displayName: pendingSignup.displayName,
-          token,
-        });
-      } catch (error) {
-        logger.warn(
-          { err: error, pendingSignupId: pendingSignup.id },
-          'Verification email resend failed',
-        );
-        throw new AppError(
-          'VERIFICATION_EMAIL_SEND_FAILED',
-          "We couldn't send the verification email. Please try again later.",
-          503,
-        );
-      }
       return { email: pendingSignup.emailNormalized };
     }
     const user = await this.users.findByIdentifier(normalized);
@@ -337,21 +317,23 @@ export class AuthService {
         },
         session,
       );
-    });
-    try {
-      await this.emailService.sendVerificationEmail({
-        to: user.email,
-        displayName: user.displayName,
-        token,
-      });
-    } catch (error) {
-      logger.warn({ err: error, userId: user.id }, 'Verification email resend failed');
-      throw new AppError(
-        'VERIFICATION_EMAIL_SEND_FAILED',
-        "We couldn't send the verification email. Please try again later.",
-        503,
+      await this.events.record(
+        {
+          eventType: 'VERIFICATION_EMAIL_REQUESTED',
+          producer: 'identity',
+          aggregateType: 'User',
+          aggregateId: user.id,
+          actorId: user.id,
+          correlationId: meta.correlationId ?? meta.requestId ?? randomUUID(),
+          payload: {
+            to: user.email,
+            displayName: user.displayName,
+            token,
+          },
+        },
+        session,
       );
-    }
+    });
     return { email: user.email };
   }
 
