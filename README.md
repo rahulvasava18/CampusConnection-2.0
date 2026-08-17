@@ -13,7 +13,7 @@ React/Vite frontend
         |             |                    (authoritative storage)
         |             +--> Redis
         |             +--> Cloudinary media storage
-        |             +--> Gmail SMTP email delivery
+        |             +--> HTTPS email provider (Resend in production)
         |
         +--> Socket.IO realtime process --> Redis adapter
 
@@ -24,7 +24,7 @@ packages/shared
         +--> shared TypeScript contracts used by frontend and backend
 ```
 
-The backend uses MongoDB as durable authoritative storage. Redis supports caching, rate limiting, realtime coordination, and BullMQ. The realtime process is authenticated separately through the existing access-token/session model. Cloudinary is the current image-storage provider behind a media-storage abstraction, and Gmail SMTP is used by the email service.
+The backend uses MongoDB as durable authoritative storage. Redis supports caching, rate limiting, realtime coordination, and BullMQ. The realtime process is authenticated separately through the existing access-token/session model. Cloudinary is the current image-storage provider behind a media-storage abstraction. Email delivery is provider-abstracted: local development may use Gmail SMTP, while production uses the Resend HTTPS API through the worker.
 
 ## Repository Structure
 
@@ -75,7 +75,7 @@ App/
 - BullMQ for background jobs
 - Socket.IO with the Redis adapter for realtime communication
 - Cloudinary for the current image-storage implementation
-- Gmail SMTP through the backend email abstraction
+- Resend HTTPS email delivery in production, with local Gmail SMTP support
 
 ### Testing
 
@@ -100,7 +100,7 @@ Environment files are local configuration and must never be committed. Copy the 
 - `frontend/.env.example` — frontend Vite configuration reference.
 - `backend/.env.test.example` — isolated QA/test configuration reference.
 
-Backend variables cover runtime ports, MongoDB, Redis, CORS, JWT/session and CSRF settings, SMTP, Cloudinary, queues, outbox processing, search, realtime limits, and rate limits. Frontend variables use the `VITE_` prefix for the API and realtime URLs. Secrets, passwords, tokens, private keys, SMTP credentials, and Cloudinary secrets belong only in local or hosting-provider secret configuration.
+Backend variables cover runtime ports, MongoDB, Redis, CORS, JWT/session and CSRF settings, email provider configuration, Cloudinary, queues, outbox processing, search, realtime limits, and rate limits. Frontend variables use the `VITE_` prefix for the API and realtime URLs. Secrets, passwords, tokens, private keys, SMTP credentials, email API keys, and Cloudinary secrets belong only in local or hosting-provider secret configuration.
 
 ## Local Development
 
@@ -207,7 +207,15 @@ Hosted frontend
 
 Managed worker process --> Managed Redis queues
 
-API services --> Cloudinary media storage and SMTP email provider
+API services --> Cloudinary media storage
+Managed worker --> Resend HTTPS email provider
+
+Production API, realtime, and worker services must each receive the shared backend configuration.
+At minimum, Render must explicitly provide `MONGO_URI`, `MONGO_DB_NAME`, `REDIS_URL`,
+`CORS_ORIGINS`, `WEB_ORIGIN`, `FRONTEND_URL`, `EMAIL_PROVIDER=resend`, `EMAIL_API_URL`,
+`EMAIL_API_KEY`, `EMAIL_FROM`, inline RS256 JWT keys, and `COOKIE_SECURE=true`. Missing or local
+development infrastructure values fail configuration validation instead of falling back to
+localhost.
 ```
 
 Production secrets must be supplied through the hosting provider's secret or environment-variable system. The repository does not contain production deployment credentials or provider URLs.
@@ -220,7 +228,7 @@ Production secrets must be supplied through the hosting provider's secret or env
 - Use HTTPS in production.
 - Configure explicit production CORS origins.
 - Use secure production cookies and the configured CSRF protection.
-- Keep JWT, database, Redis, SMTP, and Cloudinary credentials in secret management.
+- Keep JWT, database, Redis, SMTP/email-provider, and Cloudinary credentials in secret management.
 - Do not use the local development MongoDB or Redis configuration as production infrastructure.
 
 ## Deployment Status

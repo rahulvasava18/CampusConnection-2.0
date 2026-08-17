@@ -134,31 +134,7 @@ export function getEnv(): AppEnv {
   if (cachedEnv) return cachedEnv;
   const parsed = envSchema.parse(process.env);
   if (parsed.NODE_ENV === 'production') {
-    const hasInlineKeyPair = Boolean(
-      parsed.JWT_ACCESS_PRIVATE_KEY && parsed.JWT_ACCESS_PUBLIC_KEY,
-    );
-    const hasFileKeyConfiguration = Boolean(
-      parsed.JWT_ACCESS_PRIVATE_KEY_FILE || parsed.JWT_ACCESS_PUBLIC_KEY_FILE,
-    );
-    if (!hasInlineKeyPair) {
-      throw new Error(
-        'Production requires JWT_ACCESS_PRIVATE_KEY and JWT_ACCESS_PUBLIC_KEY as inline PEM values.',
-      );
-    }
-    if (hasFileKeyConfiguration) {
-      throw new Error(
-        'JWT_ACCESS_PRIVATE_KEY_FILE and JWT_ACCESS_PUBLIC_KEY_FILE are only supported outside production.',
-      );
-    }
-    if (parsed.EMAIL_PROVIDER !== 'resend') {
-      throw new Error('EMAIL_PROVIDER must be resend in production.');
-    }
-    if (!parsed.EMAIL_API_KEY || !parsed.EMAIL_FROM) {
-      throw new Error('EMAIL_API_KEY and EMAIL_FROM are required when EMAIL_PROVIDER=resend.');
-    }
-  }
-  if (parsed.NODE_ENV === 'production' && !parsed.COOKIE_SECURE) {
-    throw new Error('COOKIE_SECURE must be true in production.');
+    validateProductionEnvironment(parsed);
   }
   cachedEnv = {
     ...parsed,
@@ -171,6 +147,88 @@ export function getEnv(): AppEnv {
         : (parsed.REFRESH_COOKIE_NAME ?? 'cc_refresh'),
   };
   return cachedEnv;
+}
+
+function validateProductionEnvironment(parsed: z.infer<typeof envSchema>): void {
+  for (const name of [
+    'MONGO_URI',
+    'MONGO_DB_NAME',
+    'REDIS_URL',
+    'CORS_ORIGINS',
+    'WEB_ORIGIN',
+    'FRONTEND_URL',
+    'EMAIL_PROVIDER',
+    'EMAIL_API_URL',
+  ] as const) {
+    if (!hasConfiguredValue(name)) throw new Error(`${name} is required in production.`);
+  }
+
+  if (isLocalEndpoint(parsed.MONGO_URI)) {
+    throw new Error('MONGO_URI must not point to a local development endpoint in production.');
+  }
+  if (isLocalEndpoint(parsed.REDIS_URL)) {
+    throw new Error('REDIS_URL must not point to a local development endpoint in production.');
+  }
+
+  assertProductionHttpsUrl('WEB_ORIGIN', parsed.WEB_ORIGIN);
+  assertProductionHttpsUrl('FRONTEND_URL', parsed.FRONTEND_URL);
+  assertProductionHttpsUrl('EMAIL_API_URL', parsed.EMAIL_API_URL);
+  const origins = parsed.CORS_ORIGINS.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (!origins.length || origins.includes('*')) {
+    throw new Error('CORS_ORIGINS must contain explicit HTTPS origins in production.');
+  }
+  for (const origin of origins) assertProductionHttpsUrl('CORS_ORIGINS', origin);
+
+  const hasInlineKeyPair = Boolean(parsed.JWT_ACCESS_PRIVATE_KEY && parsed.JWT_ACCESS_PUBLIC_KEY);
+  const hasFileKeyConfiguration = Boolean(
+    parsed.JWT_ACCESS_PRIVATE_KEY_FILE || parsed.JWT_ACCESS_PUBLIC_KEY_FILE,
+  );
+  if (!hasInlineKeyPair) {
+    throw new Error(
+      'Production requires JWT_ACCESS_PRIVATE_KEY and JWT_ACCESS_PUBLIC_KEY as inline PEM values.',
+    );
+  }
+  if (hasFileKeyConfiguration) {
+    throw new Error(
+      'JWT_ACCESS_PRIVATE_KEY_FILE and JWT_ACCESS_PUBLIC_KEY_FILE are only supported outside production.',
+    );
+  }
+  if (parsed.EMAIL_PROVIDER !== 'resend') {
+    throw new Error('EMAIL_PROVIDER must be resend in production.');
+  }
+  if (!parsed.EMAIL_API_KEY) {
+    throw new Error('EMAIL_API_KEY is required when EMAIL_PROVIDER=resend.');
+  }
+  if (!parsed.EMAIL_FROM) {
+    throw new Error('EMAIL_FROM is required when EMAIL_PROVIDER=resend.');
+  }
+  if (!parsed.COOKIE_SECURE) {
+    throw new Error('COOKIE_SECURE must be true in production.');
+  }
+}
+
+function hasConfiguredValue(name: string): boolean {
+  return typeof process.env[name] === 'string' && process.env[name]!.trim().length > 0;
+}
+
+function isLocalEndpoint(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (/^(mongodb(?:\+srv)?|rediss?):\/\/(mongodb|redis)(?::|\/|$)/.test(normalized)) return true;
+  return /(^|[/:@])(localhost|127\.0\.0\.1|\[::1\])(?::|\/|$)/.test(normalized);
+}
+
+function assertProductionHttpsUrl(name: string, value: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid HTTPS URL in production.`);
+  }
+  if (parsed.protocol !== 'https:' || isLocalEndpoint(value)) {
+    throw new Error(`${name} must be a non-local HTTPS URL in production.`);
+  }
 }
 
 export function resetEnvForTests(): void {
