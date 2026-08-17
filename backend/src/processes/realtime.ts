@@ -63,8 +63,9 @@ export async function startRealtime(): Promise<void> {
     logger.info({ socketId: socket.id, userId: socket.data.userId }, 'Realtime socket connected'),
   );
 
-  httpServer.listen(env.REALTIME_PORT, () =>
-    logger.info({ port: env.REALTIME_PORT }, 'Realtime server listening'),
+  const port = env.PORT ?? env.REALTIME_PORT;
+  httpServer.listen(port, () =>
+    logger.info({ port }, 'Realtime server listening'),
   );
 
   const shutdown = async (signal: string): Promise<void> => {

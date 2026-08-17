@@ -12,7 +12,8 @@ export async function startApi(): Promise<void> {
   await connectMongo();
   await connectRedis();
   const server = createServer(createApp());
-  server.listen(env.API_PORT, () => logger.info({ port: env.API_PORT }, 'API server running'));
+  const port = env.PORT ?? env.API_PORT;
+  server.listen(port, () => logger.info({ port }, 'API server running'));
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'API shutdown requested');
