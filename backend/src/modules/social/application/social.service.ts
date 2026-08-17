@@ -21,10 +21,12 @@ import {
   ReactionRepository,
   BlockRepository,
 } from '../infrastructure/social.repositories';
-import type {
-  CommentDocument,
-  ConnectionDocument,
-  PostDocument,
+import {
+  CommentModel,
+  ConnectionModel,
+  type CommentDocument,
+  type ConnectionDocument,
+  type PostDocument,
 } from '../infrastructure/social.models';
 import {
   assertActiveActor,
@@ -188,7 +190,7 @@ export class SocialService {
     };
   }
   private async commentsCount(postId: Types.ObjectId) {
-    return (await import('../infrastructure/social.models')).CommentModel.countDocuments({
+    return CommentModel.countDocuments({
       postId,
       status: 'ACTIVE',
     }).exec();
@@ -797,9 +799,7 @@ export class SocialService {
     correlationId: string,
   ) {
     assertActiveActor(actor.accountState);
-    const connection = await import('../infrastructure/social.models').then(({ ConnectionModel }) =>
-      ConnectionModel.findById(requestId).exec(),
-    );
+    const connection = await ConnectionModel.findById(requestId).exec();
     if (!connection || connection.state !== 'PENDING')
       throw new AppError('RESOURCE_NOT_FOUND', 'The connection request was not found.', 404);
     if (connection.requestedBy.toString() === actor.userId)
@@ -811,13 +811,11 @@ export class SocialService {
       throw new AppError('FORBIDDEN', 'You cannot respond to this request.', 403);
     const state: ConnectionState = accepted ? 'ACCEPTED' : 'REJECTED';
     const saved = await withMongoTransaction(async (session) => {
-      const result = await import('../infrastructure/social.models').then(({ ConnectionModel }) =>
-        ConnectionModel.findByIdAndUpdate(
-          requestId,
-          { $set: { state, respondedAt: new Date() } },
-          { new: true, session },
-        ).exec(),
-      );
+      const result = await ConnectionModel.findByIdAndUpdate(
+        requestId,
+        { $set: { state, respondedAt: new Date() } },
+        { new: true, session },
+      ).exec();
       if (!result)
         throw new AppError('RESOURCE_NOT_FOUND', 'The connection request was not found.', 404);
       await this.record(
