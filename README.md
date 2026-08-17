@@ -169,6 +169,13 @@ npm run test:qa:database -w @campusconnection/backend
 
 ## Health Checks
 
+The public root endpoint returns service status without authentication:
+
+```text
+GET /
+HEAD /
+```
+
 The API exposes liveness and dependency readiness under the versioned API base path:
 
 ```text

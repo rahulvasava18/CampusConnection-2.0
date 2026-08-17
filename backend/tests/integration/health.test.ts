@@ -3,8 +3,22 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app';
 import { HealthService } from '../../src/application/health/health.service';
 
-describe('Phase 1 health endpoints', () => {
-  it('returns liveness under the API v1 base path', async () => {
+describe('health endpoints', () => {
+  it('returns the public service status at the root endpoint', async () => {
+    const app = createApp();
+    const response = await request(app).get('/');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ service: 'CampusConnection API', status: 'ok' });
+  });
+
+  it('supports HEAD at the public root endpoint through the GET route', async () => {
+    const app = createApp();
+    const response = await request(app).head('/');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({});
+  });
+
+  it('returns liveness under the API base path', async () => {
     const app = createApp({
       healthService: new HealthService(
         () => true,
