@@ -7,7 +7,7 @@ describe('QA security boundaries', () => {
 
   it('does not allow an arbitrary origin through credentialed CORS', async () => {
     const response = await request(app)
-      .get('/api/v1/health')
+      .get('/api/health')
       .set('Origin', 'https://attacker.invalid');
     expect(response.status).toBe(200);
     expect(response.headers['access-control-allow-origin']).toBeUndefined();
@@ -15,7 +15,7 @@ describe('QA security boundaries', () => {
 
   it('does not emit submitted passwords in the response', async () => {
     const response = await request(app)
-      .post('/api/v1/auth/login')
+      .post('/api/auth/login')
       .send({ identifier: 42, password: 'not-a-real-password' });
     expect(response.status).toBe(422);
     expect(response.text).not.toMatch(/not-a-real-password/);
@@ -24,7 +24,7 @@ describe('QA security boundaries', () => {
 
   it('handles an allowed CORS preflight without entering application routes', async () => {
     const response = await request(app)
-      .options('/api/v1/feed')
+      .options('/api/feed')
       .set('Origin', 'http://localhost:5173')
       .set('Access-Control-Request-Method', 'GET');
     expect(response.status).toBe(204);

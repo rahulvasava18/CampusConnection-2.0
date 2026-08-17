@@ -7,17 +7,17 @@ const id = '507f1f77bcf86cd799439011';
 
 describe('QA API contract and authorization matrix', () => {
   it.each([
-    ['/api/v1/feed', 'get'],
-    ['/api/v1/communities', 'get'],
-    ['/api/v1/teams', 'get'],
-    ['/api/v1/projects', 'get'],
-    ['/api/v1/events', 'get'],
-    ['/api/v1/search?q=campus', 'get'],
-    ['/api/v1/conversations', 'get'],
-    ['/api/v1/notifications', 'get'],
-    ['/api/v1/settings', 'get'],
-    ['/api/v1/recommendations/people', 'get'],
-    [`/api/v1/users/${id}/profile`, 'get'],
+    ['/api/feed', 'get'],
+    ['/api/communities', 'get'],
+    ['/api/teams', 'get'],
+    ['/api/projects', 'get'],
+    ['/api/events', 'get'],
+    ['/api/search?q=campus', 'get'],
+    ['/api/conversations', 'get'],
+    ['/api/notifications', 'get'],
+    ['/api/settings', 'get'],
+    ['/api/recommendations/people', 'get'],
+    [`/api/users/${id}/profile`, 'get'],
   ] as const)('rejects anonymous access to %s', async (path, method) => {
     const response = await request(app)[method](path);
     expect(response.status).toBe(401);
@@ -26,7 +26,7 @@ describe('QA API contract and authorization matrix', () => {
   });
 
   it('keeps the public API envelope and security headers stable', async () => {
-    const response = await request(app).get('/api/v1/health');
+    const response = await request(app).get('/api/health');
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ data: { status: 'ok' } });
     expect(response.headers['x-content-type-options']).toBe('nosniff');
@@ -41,14 +41,14 @@ describe('QA API contract and authorization matrix', () => {
   });
 
   it('rejects malformed public payloads at the request boundary', async () => {
-    const response = await request(app).post('/api/v1/auth/login').send({ identifier: 42 });
+    const response = await request(app).post('/api/auth/login').send({ identifier: 42 });
     expect(response.status).toBe(422);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
     expect(response.body.error.details.issues.length).toBeGreaterThan(0);
   });
 
   it('requires CSRF protection for cookie-authenticated mutations', async () => {
-    const response = await request(app).post('/api/v1/auth/refresh');
+    const response = await request(app).post('/api/auth/refresh');
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe('CSRF_ORIGIN_INVALID');
   });

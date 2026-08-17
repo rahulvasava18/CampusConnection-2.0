@@ -9,7 +9,7 @@ CampusConnection is a TypeScript monorepo with independently runnable frontend, 
 ```text
 React/Vite frontend
         |
-        +--> Express API (/api/v1) ------> MongoDB
+        +--> Express API (/api) ------> MongoDB
         |             |                    (authoritative storage)
         |             +--> Redis
         |             +--> Cloudinary media storage
@@ -172,8 +172,8 @@ npm run test:qa:database -w @campusconnection/backend
 The API exposes liveness and dependency readiness under the versioned API base path:
 
 ```text
-GET /api/v1/health
-GET /api/v1/ready
+GET /api/health
+GET /api/ready
 ```
 
 The API also exposes compatibility health routes at `/health` and `/ready`. The realtime process exposes:

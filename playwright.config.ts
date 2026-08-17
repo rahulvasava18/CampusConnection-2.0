@@ -16,7 +16,7 @@ export default defineConfig({
     },
     {
       command: 'npm run dev -w @campusconnection/backend -- api',
-      url: 'http://localhost:4000/api/v1/health',
+      url: 'http://localhost:4000/api/health',
       reuseExistingServer: true,
       timeout: 120000,
     },

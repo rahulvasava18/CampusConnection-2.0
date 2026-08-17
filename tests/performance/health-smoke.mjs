@@ -21,7 +21,7 @@ let failures = 0;
 async function runSample() {
   const started = performance.now();
   try {
-    const response = await fetch(`${baseUrl}/api/v1/health`);
+    const response = await fetch(`${baseUrl}/api/health`);
     if (!response.ok) failures += 1;
   } catch {
     failures += 1;

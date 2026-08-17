@@ -126,12 +126,17 @@ export function getEnv(): AppEnv {
     const hasInlineKeyPair = Boolean(
       parsed.JWT_ACCESS_PRIVATE_KEY && parsed.JWT_ACCESS_PUBLIC_KEY,
     );
-    const hasFileKeyPair = Boolean(
-      parsed.JWT_ACCESS_PRIVATE_KEY_FILE && parsed.JWT_ACCESS_PUBLIC_KEY_FILE,
+    const hasFileKeyConfiguration = Boolean(
+      parsed.JWT_ACCESS_PRIVATE_KEY_FILE || parsed.JWT_ACCESS_PUBLIC_KEY_FILE,
     );
-    if (!hasInlineKeyPair && !hasFileKeyPair) {
+    if (!hasInlineKeyPair) {
       throw new Error(
-        'A complete JWT RSA key pair is required in production via inline values or key files.',
+        'Production requires JWT_ACCESS_PRIVATE_KEY and JWT_ACCESS_PUBLIC_KEY as inline PEM values.',
+      );
+    }
+    if (hasFileKeyConfiguration) {
+      throw new Error(
+        'JWT_ACCESS_PRIVATE_KEY_FILE and JWT_ACCESS_PUBLIC_KEY_FILE are only supported outside production.',
       );
     }
   }

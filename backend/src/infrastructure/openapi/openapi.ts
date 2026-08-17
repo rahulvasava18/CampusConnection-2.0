@@ -8,7 +8,7 @@ export const openApiDocument = {
     description:
       'CampusConnection API with durable domain events and asynchronous background processing.',
   },
-  servers: [{ url: '/api/v1' }],
+  servers: [{ url: '/api' }],
   components: {
     securitySchemes: {
       bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },

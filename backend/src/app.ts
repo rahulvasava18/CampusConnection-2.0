@@ -46,7 +46,7 @@ export function createApp(dependencies: AppDependencies = {}): Express {
       customLogLevel: (_req, res) => {
         const requestPath = res.req.url?.split('?')[0];
         const isSuccessfulHealthCheck =
-          res.statusCode < 400 && (requestPath === '/api/v1/health' || requestPath === '/health');
+          res.statusCode < 400 && (requestPath === '/api/health' || requestPath === '/health');
         if (isSuccessfulHealthCheck || res.statusCode >= 400) return 'silent';
         return 'info';
       },
@@ -81,7 +81,7 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   apiRouter.use(createProfileRouter());
   apiRouter.use(createSocialRouter());
   apiRouter.use(createCollaborationRouter());
-  app.use('/api/v1', apiRouter);
+  app.use('/api', apiRouter);
 
   app.use(createHealthRouter(healthService));
   app.use(notFoundMiddleware);

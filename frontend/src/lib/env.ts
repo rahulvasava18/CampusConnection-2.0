@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 const frontendEnvSchema = z.object({
-  VITE_API_BASE_URL: z.string().url().default('http://localhost:4000/api/v1'),
+  VITE_API_BASE_URL: z.string().url().default('http://localhost:4000/api'),
   VITE_REALTIME_URL: z.string().url().default('http://localhost:4001'),
 });
 

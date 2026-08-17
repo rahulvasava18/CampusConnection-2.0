@@ -12,7 +12,7 @@ describe('Phase 1 health endpoints', () => {
         'test-api',
       ),
     });
-    const response = await request(app).get('/api/v1/health');
+    const response = await request(app).get('/api/health');
     expect(response.status).toBe(200);
     expect(response.body.data.status).toBe('ok');
     expect(response.headers['x-request-id']).toBeTruthy();
@@ -26,7 +26,7 @@ describe('Phase 1 health endpoints', () => {
         'test-api',
       ),
     });
-    const response = await request(app).get('/api/v1/ready');
+    const response = await request(app).get('/api/ready');
     expect(response.status).toBe(503);
     expect(response.body.data.status).toBe('not_ready');
     expect(response.body.data.dependencies.redis.status).toBe('down');
