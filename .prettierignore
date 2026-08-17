@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+.cache/
+test-results/
+playwright-report/
+.npm-cache/
+.git/
+
+*.docx
+*.log
+.env*
+package-lock.json

@@ -1,0 +1,36 @@
+{
+  "name": "campusconnection",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CampusConnection Phase 1 foundation",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @campusconnection/shared && npm run build -w @campusconnection/backend && npm run build -w @campusconnection/frontend",
+    "dev:shared": "npm run build -w @campusconnection/shared",
+    "dev:api": "npm run dev:shared && npm run dev -w @campusconnection/backend -- api",
+    "dev:realtime": "npm run dev:shared && npm run dev -w @campusconnection/backend -- realtime",
+    "dev:worker": "npm run dev:shared && npm run dev -w @campusconnection/backend -- worker",
+    "dev:web": "npm run dev -w @campusconnection/frontend",
+    "typecheck": "npm run build -w @campusconnection/shared && npm run typecheck -w @campusconnection/backend && npm run typecheck -w @campusconnection/frontend",
+    "lint": "eslint .",
+    "test": "npm run test:unit -w @campusconnection/backend && npm run test:integration -w @campusconnection/backend",
+    "test:e2e": "playwright test",
+    "test:all": "npm test && npm run test:e2e",
+    "test:qa": "node tests/qa/run-qa.mjs",
+    "test:qa:performance": "node tests/performance/health-smoke.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.31.0",
+    "@playwright/test": "^1.54.1",
+    "@types/node": "^22.16.5",
+    "eslint": "^9.31.0",
+    "globals": "^16.3.0",
+    "prettier": "^3.9.6",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0"
+  }
+}
