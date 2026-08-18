@@ -55,6 +55,18 @@ const envSchema = z.object({
     .transform((value) => value === 'true'),
   COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
+  GOOGLE_CLIENT_ID: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  GOOGLE_CLIENT_SECRET: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  GOOGLE_OAUTH_REDIRECT_URI: z
+    .string()
+    .url()
+    .default('http://localhost:4000/api/auth/google/callback'),
   EMAIL_PROVIDER: z.enum(['smtp', 'resend']).default('smtp'),
   EMAIL_API_URL: z.string().url().default('https://api.resend.com/emails'),
   EMAIL_API_KEY: z.preprocess(
@@ -198,6 +210,10 @@ function validateProductionEnvironment(parsed: z.infer<typeof envSchema>): void 
   if (!parsed.COOKIE_SECURE) {
     throw new Error('COOKIE_SECURE must be true in production.');
   }
+  assertProductionHttpsUrl('GOOGLE_OAUTH_REDIRECT_URI', parsed.GOOGLE_OAUTH_REDIRECT_URI);
+  if (!parsed.GOOGLE_CLIENT_ID) throw new Error('GOOGLE_CLIENT_ID is required in production.');
+  if (!parsed.GOOGLE_CLIENT_SECRET)
+    throw new Error('GOOGLE_CLIENT_SECRET is required in production.');
 }
 
 function hasConfiguredValue(name: string): boolean {

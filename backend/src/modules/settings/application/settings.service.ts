@@ -4,6 +4,7 @@ import { DomainEventRecorder } from '../../../infrastructure/events/domain-event
 import { withMongoTransaction } from '../../collaboration/application/collaboration.transaction';
 import { UserModel } from '../../identity/infrastructure/user.model';
 import type { AuthContext } from '../../identity/interfaces/auth.types';
+import { hashPassword, verifyPassword } from '../../identity/security/password.service';
 
 const defaultPreferences: UserPreferences = {
   notifications: {
@@ -52,19 +53,21 @@ export class SettingsService {
     email: string;
     username: string;
     displayName: string;
+    passwordHash?: string;
     preferences?: UserPreferences;
   }): UserSettingsView {
     return {
       email: user.email,
       username: user.username,
       displayName: user.displayName,
+      passwordConfigured: Boolean(user.passwordHash),
       preferences: this.preferences(user),
     };
   }
 
   public async get(context: AuthContext): Promise<UserSettingsView> {
     this.active(context);
-    const user = await UserModel.findById(context.userId).exec();
+    const user = await UserModel.findById(context.userId).select('+passwordHash').exec();
     if (!user) throw new AppError('AUTHENTICATION_REQUIRED', 'Authentication is required.', 401);
     return this.view(user);
   }
@@ -75,7 +78,7 @@ export class SettingsService {
     correlationId: string,
   ): Promise<UserSettingsView> {
     this.active(context);
-    const user = await UserModel.findById(context.userId).exec();
+    const user = await UserModel.findById(context.userId).select('+passwordHash').exec();
     if (!user) throw new AppError('AUTHENTICATION_REQUIRED', 'Authentication is required.', 401);
     user.preferences = {
       notifications: {
@@ -98,6 +101,35 @@ export class SettingsService {
           actorId: user.id,
           correlationId,
           payload: { userId: user.id, fields: ['preferences'] },
+        },
+        session,
+      );
+    });
+    return this.view(user);
+  }
+
+  public async setPassword(
+    context: AuthContext,
+    input: { currentPassword?: string; newPassword: string },
+    correlationId: string,
+  ): Promise<UserSettingsView> {
+    this.active(context);
+    const user = await UserModel.findById(context.userId).select('+passwordHash').exec();
+    if (!user) throw new AppError('AUTHENTICATION_REQUIRED', 'Authentication is required.', 401);
+    if (user.passwordHash && !(await verifyPassword(input.currentPassword ?? '', user.passwordHash)))
+      throw new AppError('INVALID_CURRENT_PASSWORD', 'The current password is incorrect.', 401);
+    user.passwordHash = await hashPassword(input.newPassword);
+    await withMongoTransaction(async (session) => {
+      await user.save({ session });
+      await this.events.record(
+        {
+          eventType: 'PROFILE_UPDATED',
+          producer: 'identity',
+          aggregateType: 'User',
+          aggregateId: user.id,
+          actorId: user.id,
+          correlationId,
+          payload: { userId: user.id, fields: ['passwordHash'] },
         },
         session,
       );

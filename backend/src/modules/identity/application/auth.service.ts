@@ -37,6 +37,14 @@ import {
   type EmailService,
   type VerificationEmailInput,
 } from '../infrastructure/email.service';
+import {
+  GoogleAuthStateRepository,
+} from '../infrastructure/google-auth-state.model';
+import {
+  createGoogleOAuthClient,
+  type GoogleOAuthClient,
+  type GoogleIdentity,
+} from '../infrastructure/google-oauth.service';
 
 export interface ProfileUpdateInput {
   displayName?: string;
@@ -68,6 +76,8 @@ interface ServiceDependencies {
   events?: DomainEventRecorder;
   rateLimiter?: RedisRateLimiter;
   emailService?: EmailService;
+  googleAuthStates?: GoogleAuthStateRepository;
+  googleOAuth?: GoogleOAuthClient;
 }
 
 export class AuthService {
@@ -78,6 +88,8 @@ export class AuthService {
   private readonly audits: SecurityAuditRepository;
   private readonly events: DomainEventRecorder;
   private readonly rateLimiter: RedisRateLimiter;
+  private readonly googleAuthStates: GoogleAuthStateRepository;
+  private readonly googleOAuth: GoogleOAuthClient | undefined;
   private emailService: EmailService | undefined;
 
   public constructor(dependencies: ServiceDependencies = {}) {
@@ -88,6 +100,8 @@ export class AuthService {
     this.audits = dependencies.audits ?? new SecurityAuditRepository();
     this.events = dependencies.events ?? new DomainEventRecorder();
     this.rateLimiter = dependencies.rateLimiter ?? new RedisRateLimiter();
+    this.googleAuthStates = dependencies.googleAuthStates ?? new GoogleAuthStateRepository();
+    this.googleOAuth = dependencies.googleOAuth;
     this.emailService = dependencies.emailService;
   }
 
@@ -359,6 +373,136 @@ export class AuthService {
     }
   }
 
+  public async startGoogleAuthorization(): Promise<string> {
+    const state = createOpaqueToken(32);
+    const nonce = createOpaqueToken(32);
+    await this.googleAuthStates.create({
+      stateHash: hashOpaqueToken(state),
+      nonce,
+      status: 'STARTED',
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+    return this.googleClient().authorizationUrl(state, nonce);
+  }
+
+  public async completeGoogleCallback(code: string, state: string): Promise<string> {
+    const authState = await this.googleAuthStates.findStarted(hashOpaqueToken(state));
+    if (!authState) throw new AppError('GOOGLE_AUTH_FAILED', 'Google authentication failed.', 401);
+    const identity = await this.googleClient().authenticate(code, authState.nonce);
+    const handoffToken = createOpaqueToken(32);
+    const readyState = await this.googleAuthStates.markReady(authState, {
+      handoffTokenHash: hashOpaqueToken(handoffToken),
+      googleId: identity.googleId,
+      email: identity.email,
+      displayName: identity.displayName,
+    });
+    if (!readyState) throw new AppError('GOOGLE_AUTH_FAILED', 'Google authentication failed.', 401);
+    const frontendUrl = getEnv().FRONTEND_URL.replace(/\/$/, '');
+    return `${frontendUrl}/auth/google/callback?code=${encodeURIComponent(handoffToken)}`;
+  }
+
+  public async exchangeGoogleCode(
+    handoffToken: string,
+    meta: RequestMeta,
+  ): Promise<
+    | { onboardingRequired: true; onboardingToken: string; displayName: string; email: string }
+    | ({ onboardingRequired: false } & AuthSessionResult)
+  > {
+    const authState = await this.googleAuthStates.consumeHandoff(hashOpaqueToken(handoffToken));
+    if (!authState || !authState.handoffTokenHash || !authState.googleId || !authState.email)
+      throw new AppError('GOOGLE_AUTH_FAILED', 'Google authentication failed.', 401);
+    const identity: GoogleIdentity = {
+      googleId: authState.googleId,
+      email: authState.email,
+      displayName: authState.displayName ?? authState.email.split('@')[0] ?? 'Campus student',
+    };
+    const existing = await this.users.findByEmail(identity.email);
+    if (existing) {
+      if (existing.googleId && existing.googleId !== identity.googleId)
+        throw new AppError('GOOGLE_ACCOUNT_CONFLICT', 'This Google account cannot be linked.', 409);
+      if (!existing.googleId || existing.verificationStatus !== 'VERIFIED') {
+        await this.transaction(async (session) => {
+          existing.googleId = identity.googleId;
+          existing.verificationStatus = 'VERIFIED';
+          existing.accountState = 'ACTIVE';
+          await existing.save({ session });
+        });
+      }
+      this.assertCanAuthenticate(existing);
+      const result = await this.createSession(existing, meta);
+      await this.recordAudit('GOOGLE_LOGIN_SUCCESS', existing._id, meta);
+      return { onboardingRequired: false, ...result };
+    }
+    const onboardingToken = createOpaqueToken(32);
+    const moved = await this.googleAuthStates.moveToOnboarding(
+      authState.handoffTokenHash,
+      hashOpaqueToken(onboardingToken),
+    );
+    if (!moved) throw new AppError('GOOGLE_AUTH_FAILED', 'Google authentication failed.', 401);
+    return {
+      onboardingRequired: true,
+      onboardingToken,
+      displayName: identity.displayName,
+      email: identity.email,
+    };
+  }
+
+  public async isGoogleUsernameAvailable(
+    onboardingToken: string,
+    username: string,
+  ): Promise<{ available: boolean }> {
+    const state = await this.googleAuthStates.findOnboarding(hashOpaqueToken(onboardingToken));
+    if (!state) throw new AppError('GOOGLE_ONBOARDING_EXPIRED', 'Google onboarding has expired.', 401);
+    const owner = await this.users.findByUsername(normalizeUsername(username));
+    return { available: !owner };
+  }
+
+  public async completeGoogleOnboarding(
+    input: { onboardingToken: string; displayName: string; username: string },
+    meta: RequestMeta,
+  ): Promise<AuthSessionResult> {
+    const username = normalizeUsername(input.username);
+    const user = await this.transaction(async (session) => {
+      const state = await this.googleAuthStates.findOnboarding(
+        hashOpaqueToken(input.onboardingToken),
+        session,
+      );
+      if (!state || !state.googleId || !state.email)
+        throw new AppError('GOOGLE_ONBOARDING_EXPIRED', 'Google onboarding has expired.', 401);
+      const email = normalizeEmail(state.email);
+      if (await this.users.findByEmail(email, session))
+        throw new AppError('EMAIL_ALREADY_EXISTS', 'That email is already linked to an account.', 409);
+      if (await this.users.findByUsername(username, session))
+        throw new AppError('USERNAME_ALREADY_EXISTS', 'That username is already in use.', 409);
+      const created = await this.users.create(
+        {
+          displayName: input.displayName.trim(),
+          username,
+          usernameNormalized: username,
+          email,
+          emailNormalized: email,
+          googleId: state.googleId,
+          accountState: 'ACTIVE',
+          verificationStatus: 'VERIFIED',
+          roles: ['STUDENT'],
+          skills: [],
+          interests: [],
+          goals: [],
+        },
+        session,
+      );
+      await this.googleAuthStates.consumeOnboarding(state, session);
+      return created;
+    }).catch((error) => {
+      if (isDuplicateKeyError(error))
+        throw new AppError('USERNAME_OR_EMAIL_ALREADY_EXISTS', 'That username or email is already in use.', 409);
+      throw error;
+    });
+    const result = await this.createSession(user, meta);
+    await this.recordAudit('GOOGLE_ONBOARDING_COMPLETED', user._id, meta);
+    return result;
+  }
+
   public async login(
     identifier: string,
     password: string,
@@ -366,6 +510,12 @@ export class AuthService {
   ): Promise<AuthSessionResult> {
     await this.limit('login', meta.ipAddress ?? 'unknown');
     const user = await this.users.findByIdentifier(normalizeIdentifier(identifier));
+    if (user && !user.passwordHash)
+      throw new AppError(
+        'PASSWORD_NOT_SET',
+        'This account does not have a password set. Continue with Google or set a password from Settings.',
+        403,
+      );
     const valid = await verifyPassword(password, user?.passwordHash);
     if (!user || !valid)
       throw new AppError('INVALID_CREDENTIALS', 'Invalid username/email or password.', 401);
@@ -612,6 +762,10 @@ export class AuthService {
       csrfToken,
       sessionId: session.id,
     };
+  }
+
+  private googleClient(): GoogleOAuthClient {
+    return this.googleOAuth ?? createGoogleOAuthClient();
   }
 
   private assertCanAuthenticate(user: UserDocument): void {

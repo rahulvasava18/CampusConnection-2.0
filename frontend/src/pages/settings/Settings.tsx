@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Eye,
   FolderKanban,
+  KeyRound,
   LogOut,
   MessageCircle,
   Monitor,
@@ -40,6 +41,7 @@ import {
   getSettings,
   revokeOtherSessions,
   revokeSession,
+  setPassword,
   updateSettings,
 } from '../../features/settings/settings.api';
 
@@ -118,6 +120,9 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [preferences, setPreferences] = useState<UserPreferences>(defaultPreferences);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const settings = useQuery({ queryKey: ['settings'], queryFn: getSettings });
   const sessions = useQuery({
@@ -161,6 +166,21 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
       void queryClient.invalidateQueries({ queryKey: ['settings', 'sessions'] });
     },
   });
+  const passwordMutation = useMutation({
+    mutationFn: () =>
+      setPassword({
+        ...(settings.data?.passwordConfigured ? { currentPassword } : {}),
+        newPassword,
+        confirmPassword,
+      }),
+    onSuccess: (data) => {
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setSavedMessage('Password set successfully.');
+      queryClient.setQueryData(['settings'], data);
+    },
+  });
 
   const updatePreference = <
     Section extends keyof UserPreferences,
@@ -187,7 +207,8 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
     preferencesMutation.error ??
     sessions.error ??
     revokeMutation.error ??
-    revokeOthersMutation.error;
+    revokeOthersMutation.error ??
+    passwordMutation.error;
 
   if (settings.isLoading) {
     return <LoadingState label="Loading settings" />;
@@ -400,6 +421,66 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
                   Review active sessions and revoke access from devices you no longer use.
                 </p>
               </div>
+            </div>
+            <div className="mt-5 rounded-xl border border-line bg-slate-50/70 p-4">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-brand-50 p-2 text-brand-600">
+                  <KeyRound className="h-4 w-4" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-ink">Password</h3>
+                  <p className="mt-1 text-xs leading-5 text-muted">
+                    {settings.data.passwordConfigured
+                      ? 'Password is configured. Set a new one whenever you need to change it.'
+                      : 'Password has not been set. You signed in with Google.'}
+                  </p>
+                </div>
+              </div>
+              <form
+                className="mt-4 grid gap-3 sm:grid-cols-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  passwordMutation.mutate();
+                }}
+              >
+                {settings.data.passwordConfigured ? (
+                  <Field
+                    label="Current password"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                ) : null}
+                <Field
+                  label="New password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+                <Field
+                  label="Confirm password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+                <div className="flex items-end sm:col-span-2">
+                  <Button type="submit" disabled={passwordMutation.isPending}>
+                    {passwordMutation.isPending
+                      ? 'Saving…'
+                      : settings.data.passwordConfigured
+                        ? 'Change password'
+                        : 'Set password'}
+                  </Button>
+                </div>
+              </form>
             </div>
             {sessions.isLoading ? <LoadingState label="Loading active sessions" /> : null}
             {sessions.error ? (

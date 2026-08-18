@@ -59,10 +59,39 @@ export const openApiDocument = {
     '/ready': { get: { summary: 'Dependency readiness' } },
     '/auth/signup': {
       post: {
-        summary: 'Create an unverified account and send a verification email',
+        summary: 'Legacy signup endpoint; new accounts use Google onboarding',
         responses: {
-          '201': { description: 'Account created' },
-          '409': { description: 'Duplicate email or username' },
+          '410': { description: 'Google Sign-In is required for new accounts' },
+        },
+      },
+    },
+    '/auth/google': {
+      get: {
+        summary: 'Start Google OAuth authorization',
+        responses: { '302': { description: 'Redirect to Google authorization' } },
+      },
+    },
+    '/auth/google/callback': {
+      get: {
+        summary: 'Complete the server-side Google OAuth callback',
+        responses: { '303': { description: 'Redirect to the frontend handoff page' } },
+      },
+    },
+    '/auth/google/exchange': {
+      post: {
+        summary: 'Exchange a one-time Google handoff token for a session or onboarding state',
+        responses: {
+          '200': { description: 'Session created or onboarding started' },
+          '401': { description: 'Google handoff is invalid or expired' },
+        },
+      },
+    },
+    '/auth/google/onboarding': {
+      post: {
+        summary: 'Create an account from a verified Google onboarding state',
+        responses: {
+          '201': { description: 'Account and session created' },
+          '409': { description: 'Username or email is already in use' },
         },
       },
     },
@@ -90,7 +119,7 @@ export const openApiDocument = {
         responses: {
           '200': { description: 'Session created' },
           '401': { description: 'Invalid credentials' },
-          '403': { description: 'Email not verified' },
+          '403': { description: 'Email not verified or password not set' },
         },
       },
     },
@@ -182,6 +211,17 @@ export const openApiDocument = {
         summary: 'Update account settings and preferences',
         security: [{ bearerAuth: [] }],
         responses: { '200': { description: 'Settings updated' } },
+      },
+    },
+    '/settings/password': {
+      post: {
+        summary: 'Set or change the current account password',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': { description: 'Password updated' },
+          '401': { description: 'Current password is invalid' },
+          '403': { description: 'CSRF validation failed' },
+        },
       },
     },
     '/posts': {

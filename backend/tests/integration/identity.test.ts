@@ -19,5 +19,18 @@ describe('password identity API', () => {
     const login = await request(app).post('/api/auth/login').send({});
     expect(login.status).toBe(422);
     expect(login.body.error.code).toBe('VALIDATION_ERROR');
+
+    const googleExchange = await request(app).post('/api/auth/google/exchange').send({});
+    expect(googleExchange.status).toBe(422);
+    expect(googleExchange.body.error.code).toBe('VALIDATION_ERROR');
+
+    const legacySignup = await request(app).post('/api/auth/signup').send({
+      displayName: 'Legacy User',
+      username: 'legacy_user',
+      email: 'legacy@example.com',
+      password: 'a-secure-password',
+    });
+    expect(legacySignup.status).toBe(410);
+    expect(legacySignup.body.error.code).toBe('GOOGLE_SIGNUP_REQUIRED');
   });
 });

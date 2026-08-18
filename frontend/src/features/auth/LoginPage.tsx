@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Eye, EyeOff, LoaderCircle, MailCheck } from 'lucide-react';
 import { ApiRequestError } from '../../lib/api-state';
 import { Button, ErrorState, Field } from '../../components/ui';
-import { login, resendVerification } from './auth.api';
+import { continueWithGoogle, login, resendVerification } from './auth.api';
 import { AuthLayout, navigateAuth } from './AuthLayout';
 
 export function LoginPage() {
@@ -14,11 +14,14 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [passwordNotSet, setPasswordNotSet] = useState(false);
+  const googleError = new URLSearchParams(window.location.search).has('googleError');
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setVerificationRequired(false);
+    setPasswordNotSet(false);
     setNotice(null);
     setLoading(true);
     try {
@@ -28,6 +31,7 @@ export function LoginPage() {
       const authError = requestError instanceof ApiRequestError ? requestError : undefined;
       setError(authError?.message ?? 'Unable to sign in right now. Please try again.');
       setVerificationRequired(authError?.code === 'EMAIL_NOT_VERIFIED');
+      setPasswordNotSet(authError?.code === 'PASSWORD_NOT_SET');
     } finally {
       setLoading(false);
     }
@@ -100,6 +104,12 @@ export function LoginPage() {
           </span>
         </label>
         {error ? <ErrorState message={error} /> : null}
+        {googleError ? <ErrorState message="Google sign-in could not be completed. Please try again." /> : null}
+        {passwordNotSet ? (
+          <p className="rounded-xl bg-brand-50 px-3 py-2.5 text-sm leading-6 text-brand-800">
+            This account has no password configured. Continue with Google, or set a password from Settings after signing in with Google.
+          </p>
+        ) : null}
         {notice ? (
           <p
             className="rounded-xl bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700"
@@ -127,6 +137,15 @@ export function LoginPage() {
             {resending ? 'Sending...' : 'Resend verification'}
           </Button>
         ) : null}
+        <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+          <span className="h-px flex-1 bg-line" />
+          or
+          <span className="h-px flex-1 bg-line" />
+        </div>
+        <Button type="button" variant="secondary" size="lg" className="w-full" onClick={continueWithGoogle}>
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-black text-brand-700">G</span>
+          Continue with Google
+        </Button>
       </form>
     </AuthLayout>
   );

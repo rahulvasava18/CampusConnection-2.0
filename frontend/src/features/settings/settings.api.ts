@@ -12,6 +12,17 @@ export function updateSettings(preferences: Partial<UserPreferences>) {
   });
 }
 
+export function setPassword(input: {
+  currentPassword?: string;
+  newPassword: string;
+  confirmPassword: string;
+}) {
+  return apiRequest<UserSettingsView>('/settings/password', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 export function getSessions() {
   return apiRequest<SessionView[]>('/me/sessions');
 }

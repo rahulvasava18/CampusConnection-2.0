@@ -4,7 +4,7 @@ import { validateRequest } from '../../../shared/validation/validate';
 import { requireAuth } from '../../identity/security/auth.middleware';
 import { requireCsrf } from '../../identity/security/csrf.middleware';
 import { SettingsService } from '../application/settings.service';
-import { settingsUpdate } from './settings.schemas';
+import { passwordUpdate, settingsUpdate } from './settings.schemas';
 
 function context(req: Request) {
   if (!req.auth) throw new AppError('AUTHENTICATION_REQUIRED', 'Authentication is required.', 401);
@@ -28,6 +28,20 @@ export function createSettingsRouter(service = new SettingsService()): Router {
     async (req, res, next) => {
       try {
         res.json({ data: await service.update(context(req), req.body, req.correlationId) });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+  router.post(
+    '/settings/password',
+    requireCsrf,
+    validateRequest(passwordUpdate, 'body'),
+    async (req, res, next) => {
+      try {
+        res.json({
+          data: await service.setPassword(context(req), req.body, req.correlationId),
+        });
       } catch (error) {
         next(error);
       }

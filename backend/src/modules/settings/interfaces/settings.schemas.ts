@@ -28,3 +28,15 @@ export const settingsUpdate = z
       .strict(),
   })
   .strict();
+
+export const passwordUpdate = z
+  .object({
+    currentPassword: z.string().min(1).max(128).optional(),
+    newPassword: z.string().min(8).max(128),
+    confirmPassword: z.string().min(8).max(128),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.newPassword !== value.confirmPassword)
+      context.addIssue({ code: 'custom', path: ['confirmPassword'], message: 'Passwords do not match.' });
+  });

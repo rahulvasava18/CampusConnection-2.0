@@ -1,13 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   HttpEmailService,
 } from '../../src/modules/identity/infrastructure/email.service';
+import { logger } from '../../src/shared/logging/logger';
 
 const input = {
   to: 'student@example.com',
   displayName: 'Campus Student',
   token: 'verification-token',
 };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function serviceWithResponse(status: number, timeoutMs = 100): {
   service: HttpEmailService;
@@ -53,12 +58,106 @@ describe('HTTPS email provider', () => {
   });
 
   it('marks provider validation failures as permanent', async () => {
-    const { service } = serviceWithResponse(400);
+    const errorSpy = vi.spyOn(logger, 'error');
+    const service = new HttpEmailService({
+      endpoint: 'https://api.example.test/emails',
+      apiKey: 'provider-key',
+      from: 'CampusConnection <noreply@example.com>',
+      timeoutMs: 100,
+      fetchImplementation: async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 'validation_error',
+              message: 'The from address is not verified.',
+              name: 'validation_error',
+              type: 'invalid_request_error',
+            },
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        ),
+    });
 
-    await expect(service.sendVerificationEmail(input)).rejects.toMatchObject({
+    await expect(
+      service.sendVerificationEmail({ ...input, idempotencyKey: 'correlation-400' }),
+    ).rejects.toMatchObject({
       retryable: false,
       message: 'Email provider rejected the message.',
     });
+    expect(errorSpy).toHaveBeenCalledWith(
+      {
+        status: 400,
+        correlationId: 'correlation-400',
+        providerErrorCode: 'validation_error',
+        providerErrorMessage: 'The from address is not verified.',
+        providerErrorName: 'validation_error',
+        providerErrorType: 'invalid_request_error',
+      },
+      'Email provider rejected the message.',
+    );
+  });
+
+  it('logs structured details for provider server failures without changing retry behavior', async () => {
+    const errorSpy = vi.spyOn(logger, 'error');
+    const service = new HttpEmailService({
+      endpoint: 'https://api.example.test/emails',
+      apiKey: 'provider-key',
+      from: 'CampusConnection <noreply@example.com>',
+      timeoutMs: 100,
+      fetchImplementation: async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 'internal_error',
+              message: 'Provider is temporarily unavailable.',
+              name: 'internal_error',
+              type: 'provider_error',
+            },
+          }),
+          { status: 503, headers: { 'Content-Type': 'application/json' } },
+        ),
+    });
+
+    await expect(
+      service.sendVerificationEmail({ ...input, idempotencyKey: 'correlation-503' }),
+    ).rejects.toMatchObject({
+      retryable: true,
+      message: 'Email provider is temporarily unavailable.',
+    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 503,
+        correlationId: 'correlation-503',
+        providerErrorCode: 'internal_error',
+        providerErrorMessage: 'Provider is temporarily unavailable.',
+        providerErrorName: 'internal_error',
+        providerErrorType: 'provider_error',
+      }),
+      'Email provider rejected the message.',
+    );
+  });
+
+  it('handles malformed provider error responses without exposing the response body', async () => {
+    const errorSpy = vi.spyOn(logger, 'error');
+    const service = new HttpEmailService({
+      endpoint: 'https://api.example.test/emails',
+      apiKey: 'provider-key',
+      from: 'CampusConnection <noreply@example.com>',
+      timeoutMs: 100,
+      fetchImplementation: async () => new Response('not-json-provider-content', { status: 400 }),
+    });
+
+    await expect(
+      service.sendVerificationEmail({ ...input, idempotencyKey: 'correlation-malformed' }),
+    ).rejects.toMatchObject({
+      retryable: false,
+      message: 'Email provider rejected the message.',
+    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      { status: 400, correlationId: 'correlation-malformed' },
+      'Email provider rejected the message.',
+    );
+    expect(errorSpy.mock.calls[0]?.[0]).not.toHaveProperty('responseBody');
   });
 
   it('converts network failures into retryable delivery errors without exposing provider details', async () => {

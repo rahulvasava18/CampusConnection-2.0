@@ -11,6 +11,7 @@ export interface UserDocument extends Document {
   usernameNormalized?: string;
   email: string;
   emailNormalized?: string;
+  googleId?: string;
   displayName: string;
   passwordHash?: string;
   bio?: string;
@@ -46,6 +47,7 @@ const userSchema = new Schema<UserDocument>(
     usernameNormalized: { type: String, unique: true, lowercase: true, index: true, sparse: true },
     email: { type: String, required: true, unique: true, trim: true, lowercase: true },
     emailNormalized: { type: String, unique: true, lowercase: true, index: true, sparse: true },
+    googleId: { type: String, unique: true, sparse: true, index: true },
     displayName: { type: String, required: true, trim: true, maxlength: 100 },
     passwordHash: { type: String, select: false },
     bio: { type: String, trim: true, maxlength: 500 },

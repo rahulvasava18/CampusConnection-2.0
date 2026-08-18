@@ -5,6 +5,7 @@ import {
   normalizeUsername,
 } from '../../src/modules/identity/security/credential-normalization';
 import { hashPassword, verifyPassword } from '../../src/modules/identity/security/password.service';
+import { AuthService } from '../../src/modules/identity/application/auth.service';
 
 describe('password authentication primitives', () => {
   it('normalizes email, username, and login identifiers', () => {
@@ -20,5 +21,21 @@ describe('password authentication primitives', () => {
     expect(encoded).not.toContain(password);
     expect(await verifyPassword(password, encoded)).toBe(true);
     expect(await verifyPassword('wrong-password', encoded)).toBe(false);
+  });
+
+  it('returns PASSWORD_NOT_SET for a Google-only account without verifying a fake password', async () => {
+    const service = new AuthService({
+      users: {
+        findByIdentifier: async () => ({ passwordHash: undefined }),
+      } as never,
+      rateLimiter: { consume: async () => ({ allowed: true, retryAfterSeconds: 1 }) } as never,
+    });
+
+    await expect(
+      service.login('student@example.com', 'any-password', { correlationId: 'correlation-1' }),
+    ).rejects.toMatchObject({
+      code: 'PASSWORD_NOT_SET',
+      statusCode: 403,
+    });
   });
 });

@@ -1,6 +1,7 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import { getEnv } from '../../../config/env';
 import { AppError } from '../../../shared/errors/app-error';
+import { logger } from '../../../shared/logging/logger';
 
 export interface VerificationEmailInput {
   to: string;
@@ -83,6 +84,15 @@ export class HttpEmailService implements EmailService {
         signal: controller.signal,
       });
       if (response.ok) return;
+      const providerError = await readProviderError(response);
+      logger.error(
+        {
+          status: response.status,
+          correlationId: input.idempotencyKey,
+          ...providerError,
+        },
+        'Email provider rejected the message.',
+      );
       const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
       throw new EmailDeliveryError(
         retryable ? 'Email provider is temporarily unavailable.' : 'Email provider rejected the message.',
@@ -168,4 +178,43 @@ function escapeHtml(value: string): string {
     };
     return entities[character] ?? character;
   });
+}
+
+interface ProviderErrorDetails {
+  providerErrorCode?: string;
+  providerErrorMessage?: string;
+  providerErrorName?: string;
+  providerErrorType?: string;
+}
+
+async function readProviderError(response: Response): Promise<ProviderErrorDetails> {
+  let body: unknown;
+  try {
+    body = JSON.parse(await response.text()) as unknown;
+  } catch {
+    return {};
+  }
+
+  const responseBody = asRecord(body);
+  const errorBody = asRecord(responseBody?.error);
+  const details: ProviderErrorDetails = {};
+  const code = stringValue(errorBody?.code) ?? stringValue(responseBody?.code);
+  const message = stringValue(errorBody?.message) ?? stringValue(responseBody?.message);
+  const name = stringValue(errorBody?.name) ?? stringValue(responseBody?.name);
+  const type = stringValue(errorBody?.type) ?? stringValue(responseBody?.type);
+  if (code) details.providerErrorCode = code;
+  if (message) details.providerErrorMessage = message;
+  if (name) details.providerErrorName = name;
+  if (type) details.providerErrorType = type;
+  return details;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }

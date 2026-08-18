@@ -30,6 +30,20 @@ export const resendVerificationSchema = z
   .object({ identifier: z.string().trim().min(1).max(254) })
   .strict();
 
+export const googleExchangeSchema = z.object({ code: z.string().trim().min(32).max(512) }).strict();
+
+export const googleOnboardingSchema = z
+  .object({
+    onboardingToken: z.string().trim().min(32).max(512),
+    displayName: z.string().trim().min(1).max(100),
+    username: usernameSchema,
+  })
+  .strict();
+
+export const googleUsernameAvailabilitySchema = z
+  .object({ onboardingToken: z.string().trim().min(32).max(512), username: usernameSchema })
+  .strict();
+
 export const profileUpdateSchema = z
   .object({
     displayName: z.string().trim().min(1).max(100).optional(),

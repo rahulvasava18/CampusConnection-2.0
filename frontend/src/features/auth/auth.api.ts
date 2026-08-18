@@ -50,6 +50,9 @@ export async function apiRequest<T>(
   const publicAuthRequest = [
     '/auth/login',
     '/auth/signup',
+    '/auth/google/exchange',
+    '/auth/google/onboarding',
+    '/auth/google/onboarding/username-availability',
     '/auth/verify-email',
     '/auth/resend-verification',
   ].some((route) => path.startsWith(route));
@@ -82,6 +85,54 @@ export function signup(input: {
 
 export function login(input: { identifier: string; password: string }): Promise<SessionResponse> {
   return apiRequest<SessionResponse>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }).then((result) => {
+    useAuthStore.getState().setSession(result.accessToken, result.user);
+    return result;
+  });
+}
+
+export function continueWithGoogle(): void {
+  window.location.assign(`${frontendEnv.VITE_API_BASE_URL}/auth/google`);
+}
+
+export interface GoogleOnboardingResponse {
+  onboardingRequired: true;
+  onboardingToken: string;
+  displayName: string;
+  email: string;
+}
+
+export type GoogleExchangeResponse = SessionResponse | GoogleOnboardingResponse;
+
+export function exchangeGoogleCode(code: string): Promise<GoogleExchangeResponse> {
+  return apiRequest<GoogleExchangeResponse>('/auth/google/exchange', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  }).then((result) => {
+    if (!('onboardingRequired' in result))
+      useAuthStore.getState().setSession(result.accessToken, result.user);
+    return result;
+  });
+}
+
+export function checkGoogleUsernameAvailability(input: {
+  onboardingToken: string;
+  username: string;
+}): Promise<{ available: boolean }> {
+  return apiRequest('/auth/google/onboarding/username-availability', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function completeGoogleOnboarding(input: {
+  onboardingToken: string;
+  displayName: string;
+  username: string;
+}): Promise<SessionResponse> {
+  return apiRequest<SessionResponse>('/auth/google/onboarding', {
     method: 'POST',
     body: JSON.stringify(input),
   }).then((result) => {

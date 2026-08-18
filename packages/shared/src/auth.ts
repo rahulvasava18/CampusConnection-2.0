@@ -45,6 +45,7 @@ export interface UserSettingsView {
   email: string;
   username: string;
   displayName: string;
+  passwordConfigured: boolean;
   preferences: UserPreferences;
 }
 
