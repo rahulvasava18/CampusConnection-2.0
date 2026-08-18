@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { SearchResult } from '@campusconnection/shared';
 import { CommunityHeader } from './components/CommunityHeader';
 import {
   Avatar,
@@ -15,6 +16,7 @@ import {
 import { Post } from '../post/Post';
 import { PostCard } from '../../features/social/components/PostCard';
 import { CommunicationHome } from '../../features/communication/CommunicationHome';
+import { useAuthStore } from '../../features/auth/auth.store';
 import { getCommunityPosts } from '../../features/social/social.api';
 import {
   apiErrorMessage,
@@ -41,6 +43,8 @@ import {
   updateCommunity,
   updateCommunityMember,
 } from '../../features/community/community.api';
+import { search } from '../../features/discovery/discovery.api';
+import { ApiRequestError } from '../../lib/api-state';
 
 type CommunityTab = 'posts' | 'chat' | 'members' | 'about' | 'manage';
 
@@ -52,8 +56,11 @@ export function CommunityDetail({
   onNavigate: (path: string) => void;
 }) {
   const queryClient = useQueryClient();
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const [tab, setTab] = useState<CommunityTab>('posts');
-  const [inviteeId, setInviteeId] = useState('');
+  const [inviteSearch, setInviteSearch] = useState('');
+  const [selectedInvitee, setSelectedInvitee] = useState<SearchResult | null>(null);
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [reportMessage, setReportMessage] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -95,6 +102,14 @@ export function CommunityDetail({
     queryFn: () => getCommunityReports(communityId),
     enabled: tab === 'manage',
   });
+  const inviteCandidates = useQuery({
+    queryKey: ['community-invite-search', inviteSearch.trim()],
+    queryFn: () => search(inviteSearch.trim(), 'people'),
+    enabled:
+      Boolean(community.data?.isMember) &&
+      inviteSearch.trim().length >= 2 &&
+      selectedInvitee === null,
+  });
   useEffect(() => {
     if (!community.data) return;
     setEditName(community.data.name);
@@ -121,10 +136,13 @@ export function CommunityDetail({
     onSuccess: invalidate,
   });
   const invite = useMutation({
-    mutationFn: () => inviteCommunityMember(communityId, inviteeId.trim()),
+    mutationFn: (inviteeId: string) => inviteCommunityMember(communityId, inviteeId),
     onSuccess: () => {
-      setInviteeId('');
-      setReportMessage('Invitation sent.');
+      setInviteSearch('');
+      setSelectedInvitee(null);
+      setInviteMessage('Invitation sent successfully.');
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ['community-invitations'] });
     },
   });
   const manageMember = useMutation({
@@ -215,6 +233,18 @@ export function CommunityDetail({
   const postItems = paginatedItems(posts.data?.pages);
   const canManage = ['OWNER', 'ADMIN', 'MODERATOR'].includes(item.membershipRole ?? '');
   const canAdmin = ['OWNER', 'ADMIN'].includes(item.membershipRole ?? '');
+  const inviteResults = collectionItems(inviteCandidates.data);
+  const inviteErrorMessage =
+    invite.error instanceof ApiRequestError
+      ? {
+          INVITATION_EXISTS: 'This member already has a pending invitation.',
+          MEMBERSHIP_EXISTS: 'This member is already part of the community.',
+          RESOURCE_NOT_FOUND: 'That member could not be found or is unavailable.',
+          FORBIDDEN: 'You are not authorized to invite members to this community.',
+        }[invite.error.code] ?? invite.error.message
+      : invite.error
+        ? apiErrorMessage(invite.error, 'The invitation could not be sent.')
+        : null;
 
   const reportContent = (targetType: 'POST' | 'COMMENT' | 'MEMBER', targetId: string) => {
     const reason = window.prompt(`Why are you reporting this ${targetType.toLowerCase()}?`);
@@ -426,21 +456,108 @@ export function CommunityDetail({
           {canAdmin ? (
             <Card className="p-5">
               <h2 className="type-display text-lg font-bold text-ink">Invite members</h2>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4">
                 <Field
-                  className="flex-1"
-                  label="User ID"
-                  value={inviteeId}
-                  onChange={(event) => setInviteeId(event.target.value)}
-                  placeholder="Paste a user id"
+                  label="Search member by username or name"
+                  value={inviteSearch}
+                  onChange={(event) => {
+                    setInviteSearch(event.target.value);
+                    setSelectedInvitee(null);
+                    setInviteMessage(null);
+                    invite.reset();
+                  }}
+                  placeholder="Search member by username or name"
+                  hint={
+                    inviteSearch.trim().length < 2
+                      ? 'Enter at least 2 characters to search.'
+                      : undefined
+                  }
                 />
-                <Button
-                  className="self-end"
-                  onClick={() => invite.mutate()}
-                  disabled={!inviteeId.trim() || invite.isPending}
-                >
-                  Invite
-                </Button>
+                {inviteSearch.trim().length === 0 ? (
+                  <p className="mt-3 text-sm text-muted">Search for a member to send an invitation.</p>
+                ) : null}
+                {inviteCandidates.isLoading ? (
+                  <LoadingState label="Searching members" />
+                ) : null}
+                {inviteCandidates.error ? (
+                  <p className="mt-3 text-sm font-semibold text-red-600">
+                    {apiErrorMessage(inviteCandidates.error, 'Member search is unavailable.')}
+                  </p>
+                ) : null}
+                {!inviteCandidates.isLoading &&
+                !inviteCandidates.error &&
+                inviteSearch.trim().length >= 2 &&
+                !selectedInvitee &&
+                !inviteResults.length ? (
+                  <p className="mt-3 text-sm text-muted">No matching members found.</p>
+                ) : null}
+                {selectedInvitee ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-3">
+                    <Avatar
+                      name={selectedInvitee.title}
+                      src={selectedInvitee.imageUrl}
+                      size="sm"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-ink">
+                        {selectedInvitee.title}
+                      </p>
+                      <p className="truncate text-xs text-muted">
+                        @{typeof selectedInvitee.metadata.username === 'string'
+                          ? selectedInvitee.metadata.username
+                          : 'member'}
+                      </p>
+                    </div>
+                    {selectedInvitee.id === currentUserId ? (
+                      <p className="w-full text-sm font-semibold text-amber-700">
+                        You cannot invite yourself.
+                      </p>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => invite.mutate(selectedInvitee.id)}
+                        disabled={invite.isPending}
+                      >
+                        {invite.isPending ? 'Inviting…' : 'Invite'}
+                      </Button>
+                    )}
+                  </div>
+                ) : null}
+                {!selectedInvitee && inviteResults.length ? (
+                  <div className="mt-3 space-y-2">
+                    {inviteResults.map((result) => (
+                      <button
+                        key={result.id}
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-xl border border-line bg-white p-3 text-left transition hover:border-brand-300 hover:bg-brand-50"
+                        onClick={() => {
+                          setSelectedInvitee(result);
+                          setInviteMessage(null);
+                          invite.reset();
+                        }}
+                      >
+                        <Avatar name={result.title} src={result.imageUrl} size="sm" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-ink">
+                            {result.title}
+                          </span>
+                          <span className="block truncate text-xs text-muted">
+                            @{typeof result.metadata.username === 'string'
+                              ? result.metadata.username
+                              : 'member'}
+                          </span>
+                        </span>
+                        <span className="text-xs font-semibold text-brand-700">Select</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {inviteMessage ? (
+                  <p className="mt-3 text-sm font-semibold text-emerald-700">{inviteMessage}</p>
+                ) : null}
+                {inviteErrorMessage ? (
+                  <p className="mt-3 text-sm font-semibold text-red-600">{inviteErrorMessage}</p>
+                ) : null}
               </div>
             </Card>
           ) : null}

@@ -3,6 +3,7 @@ import {
   banCreate,
   communityCreate,
   discussionCreate,
+  invitationCreate,
   joinRequestIdParams,
   ownershipTransfer,
   replyCreate,
@@ -49,5 +50,12 @@ describe('community feature boundaries', () => {
     expect(
       reportCreate.safeParse({ targetType: 'POST', targetId: id, reason: 'Off topic' }).success,
     ).toBe(true);
+  });
+
+  it('requires the internal user identifier for community invitations', () => {
+    expect(
+      invitationCreate.safeParse({ inviteeId: '507f1f77bcf86cd799439011' }).success,
+    ).toBe(true);
+    expect(invitationCreate.safeParse({ inviteeId: 'virat_18' }).success).toBe(false);
   });
 });
