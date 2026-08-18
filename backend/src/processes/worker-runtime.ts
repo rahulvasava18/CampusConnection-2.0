@@ -1,3 +1,4 @@
+import { createServer, type Server as HttpServer } from 'node:http';
 import { UnrecoverableError, type Job, type Worker } from 'bullmq';
 import type { EventJobPayload } from '@campusconnection/shared';
 import {
@@ -71,6 +72,57 @@ export interface WorkerRuntime {
   workers: Worker[];
   publisher: OutboxPublisher;
   publisherTimer: NodeJS.Timeout;
+  healthServer?: HttpServer;
+}
+
+export async function startWorkerHealthServer(port: number | undefined): Promise<HttpServer | undefined> {
+  if (port === undefined) return undefined;
+
+  const server = createServer((req, res) => {
+    if (req.url?.split('?')[0] !== '/health') {
+      res.statusCode = 404;
+      res.end();
+      return;
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.statusCode = 405;
+      res.setHeader('Allow', 'GET, HEAD');
+      res.end();
+      return;
+    }
+
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(
+      req.method === 'HEAD'
+        ? undefined
+        : JSON.stringify({ status: 'ok', service: 'CampusConnection worker' }),
+    );
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => {
+      server.removeListener('listening', onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.removeListener('error', onError);
+      resolve();
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(port, '0.0.0.0');
+  });
+
+  logger.info({ port }, 'Worker health server listening');
+  return server;
+}
+
+async function stopWorkerHealthServer(server: HttpServer | undefined): Promise<void> {
+  if (!server) return;
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
 }
 
 export async function createWorkerRuntime(): Promise<WorkerRuntime> {
@@ -156,12 +208,14 @@ export async function createWorkerRuntime(): Promise<WorkerRuntime> {
     OUTBOX_PUBLISH_INTERVAL_MS,
   );
   await publisher.publishOnce();
+  const healthServer = await startWorkerHealthServer(getEnv().PORT);
   logger.info({ queues: allQueueNames(), concurrency }, 'Phase 7 worker runtime listening');
-  return { workers, publisher, publisherTimer };
+  return { workers, publisher, publisherTimer, ...(healthServer ? { healthServer } : {}) };
 }
 
 export async function stopWorkerRuntime(runtime: WorkerRuntime): Promise<void> {
   clearInterval(runtime.publisherTimer);
+  await stopWorkerHealthServer(runtime.healthServer);
   await Promise.all(runtime.workers.map((worker) => worker.close()));
   await runtime.publisher.close();
   await closeQueues();
