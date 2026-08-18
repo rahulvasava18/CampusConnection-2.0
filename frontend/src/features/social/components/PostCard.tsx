@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   Copy,
@@ -9,18 +9,26 @@ import {
   Share2,
   ThumbsUp,
 } from 'lucide-react';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { SocialPostView } from '@campusconnection/shared';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+} from '@tanstack/react-query';
+import type { ApiCollection, SocialCommentView, SocialPostView } from '@campusconnection/shared';
 import { useAuthStore } from '../../auth/auth.store';
 import {
   createComment,
+  deleteComment,
   deletePost,
   getComments,
+  toggleCommentReaction,
   togglePostReaction,
+  updateComment,
   updatePost,
 } from '../social.api';
 import { Avatar, Badge, Button, Card, TextareaField } from '../../../components/ui';
-import { paginatedItems } from '../../../lib/api-state';
+import { apiErrorMessage, paginatedItems } from '../../../lib/api-state';
 
 export function PostCard({
   post,
@@ -36,6 +44,11 @@ export function PostCard({
   const queryClient = useQueryClient();
   const viewerId = useAuthStore((state) => state.user?.id);
   const [comment, setComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editedCommentContent, setEditedCommentContent] = useState('');
+  const [commentActionError, setCommentActionError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(post.content);
   const [shareState, setShareState] = useState<'idle' | 'copied' | 'shared'>('idle');
@@ -43,12 +56,106 @@ export function PostCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const comments = useMutation({
-    mutationFn: () => createComment(post.id, comment),
-    onSuccess: () => {
+    mutationFn: (input: { content: string; parentCommentId?: string }) =>
+      createComment(post.id, input.content, input.parentCommentId),
+    onSuccess: (created) => {
       setComment('');
+      setReplyContent('');
+      setReplyingTo(null);
+      setCommentActionError(null);
+      queryClient.setQueryData<InfiniteData<ApiCollection<SocialCommentView>>>(
+        ['comments', post.id],
+        (current) =>
+          current
+            ? {
+                ...current,
+                pages: current.pages.map((page, index) =>
+                  index === 0 ? { ...page, data: [created, ...page.data] } : page,
+                ),
+              }
+            : current,
+      );
       void queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
       void queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
+    onError: (error) => setCommentActionError(apiErrorMessage(error, 'Comment could not be posted.')),
+  });
+  const commentEdit = useMutation({
+    mutationFn: (input: { commentId: string; content: string }) =>
+      updateComment(input.commentId, input.content),
+    onSuccess: (updated) => {
+      setEditingCommentId(null);
+      setEditedCommentContent('');
+      setCommentActionError(null);
+      queryClient.setQueryData<InfiniteData<ApiCollection<SocialCommentView>>>(
+        ['comments', post.id],
+        (current) =>
+          current
+            ? {
+                ...current,
+                pages: current.pages.map((page) => ({
+                  ...page,
+                  data: page.data.map((item) => (item.id === updated.id ? updated : item)),
+                })),
+              }
+            : current,
+      );
+    },
+    onError: (error) => setCommentActionError(apiErrorMessage(error, 'Comment could not be updated.')),
+  });
+  const commentDelete = useMutation({
+    mutationFn: (commentId: string) => deleteComment(commentId),
+    onSuccess: (_result, commentId) => {
+      setCommentActionError(null);
+      queryClient.setQueryData<InfiniteData<ApiCollection<SocialCommentView>>>(
+        ['comments', post.id],
+        (current) =>
+          current
+            ? {
+                ...current,
+                pages: current.pages.map((page) => ({
+                  ...page,
+                  data: page.data.filter((item) => item.id !== commentId),
+                })),
+              }
+            : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
+      void queryClient.invalidateQueries({ queryKey: ['feed'] });
+    },
+    onError: (error) => setCommentActionError(apiErrorMessage(error, 'Comment could not be deleted.')),
+  });
+  const commentReaction = useMutation({
+    mutationFn: (input: { commentId: string; reacted: boolean }) =>
+      toggleCommentReaction(input.commentId, input.reacted),
+    onSuccess: (_result, input) => {
+      setCommentActionError(null);
+      queryClient.setQueryData<InfiniteData<ApiCollection<SocialCommentView>>>(
+        ['comments', post.id],
+        (current) =>
+          current
+            ? {
+                ...current,
+                pages: current.pages.map((page) => ({
+                  ...page,
+                  data: page.data.map((item) =>
+                    item.id === input.commentId
+                      ? {
+                          ...item,
+                          viewerHasReacted: !input.reacted,
+                          reactionCount: Math.max(
+                            0,
+                            item.reactionCount + (input.reacted ? -1 : 1),
+                          ),
+                        }
+                      : item,
+                  ),
+                })),
+              }
+            : current,
+      );
+    },
+    onError: (error) => setCommentActionError(apiErrorMessage(error, 'Comment reaction failed.')),
   });
   const reaction = useMutation({
     mutationFn: () => togglePostReaction(post.id, post.viewerHasReacted),
@@ -72,6 +179,23 @@ export function PostCard({
     getNextPageParam: (page) => page.pagination.nextCursor ?? undefined,
     enabled: commentsOpen,
   });
+  const commentItems = paginatedItems(listedComments.data?.pages);
+  const { topLevelComments, repliesByParent } = useMemo(() => {
+    const knownIds = new Set(commentItems.map((item) => item.id));
+    const replies = new Map<string, SocialCommentView[]>();
+    for (const item of commentItems) {
+      if (!item.parentCommentId) continue;
+      const current = replies.get(item.parentCommentId) ?? [];
+      current.push(item);
+      replies.set(item.parentCommentId, current);
+    }
+    return {
+      topLevelComments: commentItems.filter(
+        (item) => !item.parentCommentId || !knownIds.has(item.parentCommentId),
+      ),
+      repliesByParent: replies,
+    };
+  }, [commentItems]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -100,6 +224,178 @@ export function PostCard({
       setShareState('idle');
     }
     window.setTimeout(() => setShareState('idle'), 1800);
+  };
+
+  const renderComment = (item: SocialCommentView, depth = 0) => {
+    const isOwner = viewerId === item.author.id;
+    const isEditing = editingCommentId === item.id;
+    const isReplying = replyingTo === item.id;
+    const edited = item.updatedAt !== item.createdAt;
+    const nested = depth > 0;
+    const childComments = repliesByParent.get(item.id) ?? [];
+    return (
+      <div
+        key={item.id}
+        className={nested ? 'ml-8 border-l border-line pl-4 sm:ml-12' : ''}
+      >
+        <div className="flex items-start gap-2">
+          <Avatar name={item.author.displayName} src={item.author.avatarUrl} size="sm" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <strong className="text-sm text-ink">{item.author.displayName}</strong>
+              <span className="text-xs text-muted">@{item.author.username}</span>
+              <span className="text-xs text-muted">
+                {new Date(item.createdAt).toLocaleString()}
+              </span>
+            </div>
+            {isEditing ? (
+              <div className="mt-2 space-y-2">
+                <TextareaField
+                  label="Edit comment"
+                  aria-label="Edit comment"
+                  value={editedCommentContent}
+                  onChange={(event) => setEditedCommentContent(event.target.value)}
+                  rows={2}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const content = editedCommentContent.trim();
+                      if (content) commentEdit.mutate({ commentId: item.id, content });
+                    }}
+                    disabled={commentEdit.isPending || !editedCommentContent.trim()}
+                  >
+                    {commentEdit.isPending ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditingCommentId(null);
+                      setEditedCommentContent('');
+                    }}
+                    disabled={commentEdit.isPending}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                {item.content}{' '}
+                {edited ? <span className="text-xs text-muted">(edited)</span> : null}
+              </p>
+            )}
+            {!isEditing ? (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="min-h-8 px-2 py-1 text-xs"
+                  onClick={() =>
+                    commentReaction.mutate({
+                      commentId: item.id,
+                      reacted: item.viewerHasReacted,
+                    })
+                  }
+                  disabled={commentReaction.isPending}
+                  aria-pressed={item.viewerHasReacted}
+                >
+                  {item.viewerHasReacted ? 'Unlike' : 'Like'} · {item.reactionCount}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="min-h-8 px-2 py-1 text-xs"
+                  onClick={() => {
+                    setReplyingTo(isReplying ? null : item.id);
+                    setReplyContent('');
+                    setCommentActionError(null);
+                  }}
+                >
+                  Reply
+                </Button>
+                {isOwner ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="min-h-8 px-2 py-1 text-xs"
+                      onClick={() => {
+                        setEditingCommentId(item.id);
+                        setEditedCommentContent(item.content);
+                        setCommentActionError(null);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="min-h-8 px-2 py-1 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                      onClick={() => {
+                        if (window.confirm('Delete this comment?')) commentDelete.mutate(item.id);
+                      }}
+                      disabled={commentDelete.isPending}
+                    >
+                      {commentDelete.isPending ? 'Deleting…' : 'Delete'}
+                    </Button>
+                  </>
+                ) : null}
+                {onReportComment ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="min-h-8 px-2 py-1 text-xs"
+                    onClick={() => onReportComment(item.id)}
+                  >
+                    Report
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+            {isReplying ? (
+              <form
+                className="mt-2 space-y-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const content = replyContent.trim();
+                  if (content) comments.mutate({ content, parentCommentId: item.id });
+                }}
+              >
+                <TextareaField
+                  label={`Reply to ${item.author.displayName}`}
+                  aria-label={`Reply to ${item.author.displayName}`}
+                  value={replyContent}
+                  onChange={(event) => setReplyContent(event.target.value)}
+                  placeholder="Write a reply…"
+                  rows={2}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" type="submit" disabled={comments.isPending || !replyContent.trim()}>
+                    {comments.isPending ? 'Replying…' : 'Reply'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setReplyingTo(null);
+                      setReplyContent('');
+                    }}
+                    disabled={comments.isPending}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            ) : null}
+          </div>
+        </div>
+        {childComments.map((child) => renderComment(child, Math.min(depth + 1, 2)))}
+      </div>
+    );
   };
 
   const categoryBadge = (
@@ -281,19 +577,29 @@ export function PostCard({
               Conversation
             </p>
           </div>
-          {paginatedItems(listedComments.data?.pages).map((item) => (
-            <div key={item.id} className="flex items-start gap-2 text-sm text-slate-600">
-              <p className="min-w-0 flex-1">
-                <strong className="text-ink">{item.author.displayName}</strong> {item.content}
+          {listedComments.isLoading ? (
+            <p className="text-sm text-muted" role="status">
+              Loading comments…
+            </p>
+          ) : null}
+          {listedComments.error ? (
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-red-600">
+                {apiErrorMessage(listedComments.error, 'Comments could not be loaded.')}
               </p>
-              {onReportComment ? (
-                <Button size="sm" variant="ghost" onClick={() => onReportComment(item.id)}>
-                  Report
-                </Button>
-              ) : null}
+              <Button size="sm" variant="secondary" onClick={() => void listedComments.refetch()}>
+                Retry comments
+              </Button>
             </div>
-          ))}
-          {!listedComments.isLoading && !paginatedItems(listedComments.data?.pages).length ? (
+          ) : null}
+          {!listedComments.isLoading && !listedComments.error
+            ? topLevelComments.map((item) => (
+                <div key={item.id} className="space-y-2">
+                  {renderComment(item)}
+                </div>
+              ))
+            : null}
+          {!listedComments.isLoading && !listedComments.error && !commentItems.length ? (
             <p className="text-sm text-muted">No comments yet. Start the conversation.</p>
           ) : null}
           {listedComments.hasNextPage ? (
@@ -310,7 +616,8 @@ export function PostCard({
             className="flex gap-2"
             onSubmit={(event) => {
               event.preventDefault();
-              if (comment.trim()) comments.mutate();
+              const content = comment.trim();
+              if (content) comments.mutate({ content });
             }}
           >
             <input
@@ -320,11 +627,16 @@ export function PostCard({
               placeholder="Add a thoughtful comment"
               className="min-w-0 flex-1 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10"
             />
-            <Button type="submit" size="sm" disabled={comments.isPending}>
+            <Button type="submit" size="sm" disabled={comments.isPending || !comment.trim()}>
               <Send className="h-4 w-4" />
-              Comment
+              {comments.isPending ? 'Posting…' : 'Comment'}
             </Button>
           </form>
+          {commentActionError ? (
+            <p className="text-sm font-semibold text-red-600" role="alert">
+              {commentActionError}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </Card>

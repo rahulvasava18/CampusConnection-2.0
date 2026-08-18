@@ -81,10 +81,24 @@ export function getComments(postId: string, cursor?: string) {
     `/posts/${postId}/comments?${query.toString()}`,
   );
 }
-export function createComment(postId: string, content: string) {
+export function createComment(postId: string, content: string, parentCommentId?: string) {
   return apiRequest<SocialCommentView>(`/posts/${postId}/comments`, {
     method: 'POST',
+    body: JSON.stringify({ content, ...(parentCommentId ? { parentCommentId } : {}) }),
+  });
+}
+export function updateComment(commentId: string, content: string) {
+  return apiRequest<SocialCommentView>(`/comments/${commentId}`, {
+    method: 'PATCH',
     body: JSON.stringify({ content }),
+  });
+}
+export function deleteComment(commentId: string) {
+  return apiRequest<void>(`/comments/${commentId}`, { method: 'DELETE' });
+}
+export function toggleCommentReaction(commentId: string, reacted: boolean) {
+  return apiRequest<void>(`/comments/${commentId}/reactions/LIKE`, {
+    method: reacted ? 'DELETE' : 'PUT',
   });
 }
 export function requestConnection(userId: string) {
