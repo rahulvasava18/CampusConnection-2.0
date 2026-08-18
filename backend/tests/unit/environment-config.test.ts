@@ -18,6 +18,7 @@ const managedKeys = [
   'JWT_ACCESS_PRIVATE_KEY_FILE',
   'JWT_ACCESS_PUBLIC_KEY_FILE',
   'COOKIE_SECURE',
+  'COOKIE_SAME_SITE',
 ] as const;
 
 const productionDefaults: Record<(typeof managedKeys)[number], string> = {
@@ -37,6 +38,7 @@ const productionDefaults: Record<(typeof managedKeys)[number], string> = {
   JWT_ACCESS_PRIVATE_KEY_FILE: '',
   JWT_ACCESS_PUBLIC_KEY_FILE: '',
   COOKIE_SECURE: 'true',
+  COOKIE_SAME_SITE: 'none',
 };
 
 const originalValues = new Map<string, string | undefined>();
@@ -121,6 +123,11 @@ describe('environment configuration safety', () => {
       'EMAIL_FROM is required when EMAIL_PROVIDER=resend.',
     );
     expectProductionFailure('COOKIE_SECURE', 'false', 'COOKIE_SECURE must be true in production.');
+    expectProductionFailure(
+      'COOKIE_SAME_SITE',
+      'lax',
+      'COOKIE_SAME_SITE must be none in production.',
+    );
   });
 
   it('rejects localhost production frontend and CORS origins', () => {

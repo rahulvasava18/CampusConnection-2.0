@@ -65,7 +65,13 @@ export function createApp(dependencies: AppDependencies = {}): Express {
     }),
   );
   app.use(helmet());
-  app.use(cors({ origin: env.corsOrigins, credentials: true }));
+  app.use(
+    cors({
+      origin: env.corsOrigins,
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'Authorization', env.CSRF_HEADER_NAME],
+    }),
+  );
   app.use(express.json({ limit: '1mb' }));
   app.get('/', (_req, res) => {
     res.status(200).json({ service: 'CampusConnection API', status: 'ok' });

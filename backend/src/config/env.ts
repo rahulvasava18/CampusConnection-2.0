@@ -210,6 +210,9 @@ function validateProductionEnvironment(parsed: z.infer<typeof envSchema>): void 
   if (!parsed.COOKIE_SECURE) {
     throw new Error('COOKIE_SECURE must be true in production.');
   }
+  if (parsed.COOKIE_SAME_SITE !== 'none') {
+    throw new Error('COOKIE_SAME_SITE must be none in production.');
+  }
   assertProductionHttpsUrl('GOOGLE_OAUTH_REDIRECT_URI', parsed.GOOGLE_OAUTH_REDIRECT_URI);
   if (!parsed.GOOGLE_CLIENT_ID) throw new Error('GOOGLE_CLIENT_ID is required in production.');
   if (!parsed.GOOGLE_CLIENT_SECRET)
