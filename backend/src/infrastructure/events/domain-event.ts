@@ -1,9 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import type { ClientSession } from 'mongoose';
 import type { EventEnvelope, EventType } from '@campusconnection/shared';
-import { MongooseOutboxEventRepository } from './outbox.repository';
 
-export interface PublishEventInput<TPayload extends Record<string, unknown>> {
+export type DomainEvent = EventEnvelope<Record<string, unknown>>;
+
+const eventsBySession = new WeakMap<object, DomainEvent[]>();
+
+export function takeRecordedEvents(session: ClientSession): DomainEvent[] {
+  const events = eventsBySession.get(session) ?? [];
+  eventsBySession.delete(session);
+  return events;
+}
+
+export function discardRecordedEvents(session: ClientSession): void {
+  eventsBySession.delete(session);
+}
+
+export interface RecordEventInput<TPayload extends Record<string, unknown>> {
   eventType: EventType;
   producer: string;
   aggregateType: string;
@@ -14,14 +27,12 @@ export interface PublishEventInput<TPayload extends Record<string, unknown>> {
   payload: TPayload;
 }
 
-export class OutboxEventPublisher {
-  public constructor(private readonly repository = new MongooseOutboxEventRepository()) {}
-
-  public async record<TPayload extends Record<string, unknown>>(
-    input: PublishEventInput<TPayload>,
+export class DomainEventRecorder {
+  public record<TPayload extends Record<string, unknown>>(
+    input: RecordEventInput<TPayload>,
     session?: ClientSession,
-  ) {
-    const envelope: EventEnvelope<TPayload> = {
+  ): DomainEvent {
+    const event: DomainEvent = {
       eventId: randomUUID(),
       eventType: input.eventType,
       eventVersion: 1,
@@ -35,6 +46,11 @@ export class OutboxEventPublisher {
       ...(input.causationId ? { causationId: input.causationId } : {}),
       payload: input.payload,
     };
-    return this.repository.createPending(envelope, session);
+    if (session) {
+      const events = eventsBySession.get(session) ?? [];
+      events.push(event);
+      eventsBySession.set(session, events);
+    }
+    return event;
   }
 }

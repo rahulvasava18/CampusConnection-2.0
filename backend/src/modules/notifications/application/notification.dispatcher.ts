@@ -1,24 +1,12 @@
-import type { EventJobPayload } from '@campusconnection/shared';
-import type { Job } from 'bullmq';
-import { OutboxEventModel, type OutboxEventDocument } from '../events/outbox-event.model';
-import {
-  claimEventProcessing,
-  completeEventProcessing,
-  failEventProcessing,
-} from '../events/event-processing.repository';
-import {
-  NotificationModel,
-  AnalyticsEventModel,
-  SearchIndexOperationModel,
-  DerivedWorkModel,
-} from '../async/async.models';
+import type { DomainEvent } from '../../../infrastructure/events/domain-event';
+import { NotificationModel } from '../infrastructure/notification.model';
 import {
   ConversationMemberModel,
   MessageModel,
-} from '../../modules/communication/infrastructure/communication.models';
-import { getRedisClient } from '../redis/client';
-import { conversationPresenceKey } from '../../modules/communication/realtime/presence';
-import { CommentModel, PostModel } from '../../modules/social/infrastructure/social.models';
+} from '../../communication/infrastructure/communication.models';
+import { getRedisClient } from '../../../infrastructure/redis/client';
+import { conversationPresenceKey } from '../../communication/realtime/presence';
+import { CommentModel, PostModel } from '../../social/infrastructure/social.models';
 import {
   CommunityModel,
   DiscussionModel,
@@ -26,12 +14,10 @@ import {
   EventRegistrationModel,
   ProjectModel,
   TeamModel,
-} from '../../modules/collaboration/infrastructure/collaboration.models';
-import { logger } from '../../shared/logging/logger';
-import { UserModel } from '../../modules/identity/infrastructure/user.model';
+} from '../../collaboration/infrastructure/collaboration.models';
+import { UserModel } from '../../identity/infrastructure/user.model';
 
-type EventJob = Job<EventJobPayload>;
-type EventRecord = OutboxEventDocument;
+type EventRecord = DomainEvent;
 
 function payloadOf(event: EventRecord): Record<string, unknown> {
   return (event.payload ?? {}) as Record<string, unknown>;
@@ -98,48 +84,6 @@ function notificationMetadata(
   ) as Record<string, string | number | boolean>;
   Object.assign(metadata, context);
   return Object.keys(metadata).length ? metadata : undefined;
-}
-
-async function withEventProcessing(
-  job: EventJob,
-  consumerName: string,
-  work: (event: EventRecord) => Promise<void>,
-): Promise<void> {
-  const event = await OutboxEventModel.findOne({ eventId: job.data.eventId }).exec();
-  if (!event) throw new Error(`Outbox event ${job.data.eventId} was not found`);
-  const claim = await claimEventProcessing(
-    job.data.eventId,
-    consumerName,
-    job.data.eventType,
-    job.data.eventVersion,
-    job.data.correlationId,
-  );
-  if (claim.completed) return;
-  const startedAt = Date.now();
-  try {
-    await work(event);
-    await completeEventProcessing(job.data.eventId, consumerName);
-    logger.info(
-      {
-        jobId: job.id,
-        eventId: job.data.eventId,
-        eventType: job.data.eventType,
-        queue: job.queueName,
-        attempt: job.attemptsMade + 1,
-        correlationId: job.data.correlationId,
-        durationMs: Date.now() - startedAt,
-        result: 'completed',
-      },
-      `${consumerName} event handled`,
-    );
-  } catch (error) {
-    await failEventProcessing(
-      job.data.eventId,
-      consumerName,
-      error instanceof Error ? error.message : String(error),
-    );
-    throw error;
-  }
 }
 
 function notificationText(eventType: string): { type: string; title: string } {
@@ -361,137 +305,38 @@ async function respectNotificationPreferences(eventType: string, recipientIds: s
   return recipientIds.filter((recipientId) => allowed.has(recipientId));
 }
 
-export async function handleNotificationJob(job: EventJob): Promise<void> {
-  await withEventProcessing(job, 'notification-consumer', async (event) => {
-    const recipients = await respectNotificationPreferences(
-      event.eventType,
-      await notificationRecipients(event),
-    );
-    const text = notificationText(event.eventType);
-    const payload = payloadOf(event);
-    const metadata = notificationMetadata(payload, await notificationContext(event, payload));
-    await Promise.all(
-      recipients.map((recipientId) =>
-        NotificationModel.updateOne(
-          { sourceEventId: event.eventId, recipientId },
-          {
-            $setOnInsert: {
-              recipientId,
-              sourceEventId: event.eventId,
-              type: text.type,
-              title: text.title,
-              aggregateType: event.aggregateType,
-              aggregateId: event.aggregateId,
-              ...(event.actorId ? { actorId: event.actorId } : {}),
-              ...(metadata ? { metadata } : {}),
-              ...(event.eventType === 'TEAM_INVITATION_SENT'
-                ? { body: 'You were invited to join this team.' }
-                : {}),
-              ...(id(payload.conversationId)
-                ? { body: 'Open CampusConnection to view the conversation.' }
-                : {}),
-            },
+export async function handleNotificationEvent(event: EventRecord): Promise<void> {
+  const recipients = await respectNotificationPreferences(
+    event.eventType,
+    await notificationRecipients(event),
+  );
+  const text = notificationText(event.eventType);
+  const payload = payloadOf(event);
+  const metadata = notificationMetadata(payload, await notificationContext(event, payload));
+  await Promise.all(
+    recipients.map((recipientId) =>
+      NotificationModel.updateOne(
+        { sourceEventId: event.eventId, recipientId },
+        {
+          $setOnInsert: {
+            recipientId,
+            sourceEventId: event.eventId,
+            type: text.type,
+            title: text.title,
+            aggregateType: event.aggregateType,
+            aggregateId: event.aggregateId,
+            ...(event.actorId ? { actorId: event.actorId } : {}),
+            ...(metadata ? { metadata } : {}),
+            ...(event.eventType === 'TEAM_INVITATION_SENT'
+              ? { body: 'You were invited to join this team.' }
+              : {}),
+            ...(id(payload.conversationId)
+              ? { body: 'Open CampusConnection to view the conversation.' }
+              : {}),
           },
-          { upsert: true },
-        ).exec(),
-      ),
-    );
-  });
-}
-
-function safePayloadSummary(payload: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(payload).filter(
-      ([key, value]) =>
-        (key.endsWith('Id') || key === 'reason' || key === 'status' || key === 'postType') &&
-        (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'),
+        },
+        { upsert: true },
+      ).exec(),
     ),
   );
-}
-
-export async function handleAnalyticsJob(job: EventJob): Promise<void> {
-  await withEventProcessing(job, 'analytics-consumer', async (event) => {
-    await AnalyticsEventModel.updateOne(
-      { sourceEventId: event.eventId },
-      {
-        $setOnInsert: {
-          sourceEventId: event.eventId,
-          eventType: event.eventType,
-          eventVersion: event.eventVersion ?? event.schemaVersion,
-          aggregateType: event.aggregateType,
-          aggregateId: event.aggregateId,
-          correlationId: event.correlationId,
-          occurredAt: event.occurredAt,
-          payloadSummary: safePayloadSummary(payloadOf(event)),
-        },
-      },
-      { upsert: true },
-    ).exec();
-  });
-}
-
-export async function handleSearchIndexJob(job: EventJob): Promise<void> {
-  await withEventProcessing(job, 'search-index-consumer', async (event) => {
-    const payload = payloadOf(event);
-    const entityId =
-      id(payload.postId) ??
-      id(payload.teamId) ??
-      id(payload.projectId) ??
-      id(payload.communityId) ??
-      event.aggregateId;
-    const operation =
-      event.eventType.endsWith('_DELETED') || event.eventType === 'TEAM_ARCHIVED'
-        ? 'DELETE'
-        : 'UPSERT';
-    await SearchIndexOperationModel.updateOne(
-      { sourceEventId: event.eventId },
-      {
-        $setOnInsert: {
-          sourceEventId: event.eventId,
-          entityType: event.aggregateType,
-          entityId,
-          operation,
-          status: 'COMPLETED',
-          processedAt: new Date(),
-        },
-      },
-      { upsert: true },
-    ).exec();
-    logger.info(
-      {
-        eventId: event.eventId,
-        eventType: event.eventType,
-        entityType: event.aggregateType,
-        entityId,
-        operation,
-      },
-      'Search index operation recorded',
-    );
-  });
-}
-
-export async function handleDerivedJob(
-  job: EventJob,
-  consumer: 'FEED' | 'RECOMMENDATION',
-): Promise<void> {
-  await withEventProcessing(job, `${consumer.toLowerCase()}-consumer`, async (event) => {
-    await DerivedWorkModel.updateOne(
-      { sourceEventId: event.eventId, consumer },
-      {
-        $setOnInsert: {
-          sourceEventId: event.eventId,
-          consumer,
-          eventType: event.eventType,
-          aggregateType: event.aggregateType,
-          aggregateId: event.aggregateId,
-          processedAt: new Date(),
-        },
-      },
-      { upsert: true },
-    ).exec();
-    logger.info(
-      { eventId: event.eventId, eventType: event.eventType, consumer },
-      'Derived-state invalidation recorded',
-    );
-  });
 }

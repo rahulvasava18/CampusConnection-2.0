@@ -10,7 +10,7 @@ import type {
 } from '@campusconnection/shared';
 import { decodeCursor, encodeCursor } from '@campusconnection/shared';
 import { AppError } from '../../../shared/errors/app-error';
-import { OutboxEventPublisher } from '../../../infrastructure/events/event-publisher';
+import { DomainEventRecorder } from '../../../infrastructure/events/domain-event';
 import { UserModel } from '../../identity/infrastructure/user.model';
 import { BlockRepository } from '../../social/infrastructure/social.repositories';
 import {
@@ -81,19 +81,19 @@ export class CommunicationService {
   private readonly conversations: ConversationRepository;
   private readonly messages: MessageRepository;
   private readonly blocks: BlockRepository;
-  private readonly events: OutboxEventPublisher;
+  private readonly events: DomainEventRecorder;
   public constructor(
     dependencies: {
       conversations?: ConversationRepository;
       messages?: MessageRepository;
       blocks?: BlockRepository;
-      events?: OutboxEventPublisher;
+      events?: DomainEventRecorder;
     } = {},
   ) {
     this.conversations = dependencies.conversations ?? new ConversationRepository();
     this.messages = dependencies.messages ?? new MessageRepository();
     this.blocks = dependencies.blocks ?? new BlockRepository();
-    this.events = dependencies.events ?? new OutboxEventPublisher();
+    this.events = dependencies.events ?? new DomainEventRecorder();
   }
 
   async createConversation(

@@ -8,7 +8,7 @@ import type {
 import { Types } from 'mongoose';
 import { AppError } from '../../../shared/errors/app-error';
 import { getRedisClient } from '../../../infrastructure/redis/client';
-import { OutboxEventPublisher } from '../../../infrastructure/events/event-publisher';
+import { DomainEventRecorder } from '../../../infrastructure/events/domain-event';
 import { withMongoTransaction } from '../../social/application/social.transaction';
 import { BlockRepository } from '../../social/infrastructure/social.repositories';
 import { ConnectionModel } from '../../social/infrastructure/social.models';
@@ -90,12 +90,12 @@ function safeMetadata(value: Record<string, unknown>): Record<string, unknown> {
 
 export class IntelligenceService {
   private readonly blocks: BlockRepository;
-  private readonly events: OutboxEventPublisher;
+  private readonly events: DomainEventRecorder;
   public constructor(
-    dependencies: { blocks?: BlockRepository; events?: OutboxEventPublisher } = {},
+    dependencies: { blocks?: BlockRepository; events?: DomainEventRecorder } = {},
   ) {
     this.blocks = dependencies.blocks ?? new BlockRepository();
-    this.events = dependencies.events ?? new OutboxEventPublisher();
+    this.events = dependencies.events ?? new DomainEventRecorder();
   }
 
   public async getRecommendations(

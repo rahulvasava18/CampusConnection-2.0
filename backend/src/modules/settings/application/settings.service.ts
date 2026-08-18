@@ -1,6 +1,6 @@
 import type { UserPreferences, UserSettingsView } from '@campusconnection/shared';
 import { AppError } from '../../../shared/errors/app-error';
-import { OutboxEventPublisher } from '../../../infrastructure/events/event-publisher';
+import { DomainEventRecorder } from '../../../infrastructure/events/domain-event';
 import { withMongoTransaction } from '../../collaboration/application/collaboration.transaction';
 import { UserModel } from '../../identity/infrastructure/user.model';
 import type { AuthContext } from '../../identity/interfaces/auth.types';
@@ -28,7 +28,7 @@ export interface SettingsUpdateInput {
 }
 
 export class SettingsService {
-  public constructor(private readonly events = new OutboxEventPublisher()) {}
+  public constructor(private readonly events = new DomainEventRecorder()) {}
 
   private active(context: AuthContext) {
     if (!['ACTIVE', 'RESTRICTED'].includes(context.user.accountState))

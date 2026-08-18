@@ -12,7 +12,7 @@ import type {
 } from '@campusconnection/shared';
 import { decodeCursor, encodeCursor } from '@campusconnection/shared';
 import { AppError } from '../../../shared/errors/app-error';
-import { OutboxEventPublisher } from '../../../infrastructure/events/event-publisher';
+import { DomainEventRecorder } from '../../../infrastructure/events/domain-event';
 import { UserRepository } from '../../identity/infrastructure/identity.repositories';
 import {
   CommentRepository,
@@ -64,7 +64,7 @@ interface SocialDependencies {
   connections?: ConnectionRepository;
   blocks?: BlockRepository;
   users?: UserRepository;
-  events?: OutboxEventPublisher;
+  events?: DomainEventRecorder;
   mediaStorage?: MediaStorage;
   mediaAssets?: MediaAssetRepository;
 }
@@ -76,7 +76,7 @@ export class SocialService {
   private readonly connections: ConnectionRepository;
   private readonly blocks: BlockRepository;
   private readonly users: UserRepository;
-  private readonly events: OutboxEventPublisher;
+  private readonly events: DomainEventRecorder;
   private readonly feedRanking: FeedRankingService;
   private readonly mediaStorage: MediaStorage;
   private readonly mediaAssets: MediaAssetRepository;
@@ -87,7 +87,7 @@ export class SocialService {
     this.connections = dependencies.connections ?? new ConnectionRepository();
     this.blocks = dependencies.blocks ?? new BlockRepository();
     this.users = dependencies.users ?? new UserRepository();
-    this.events = dependencies.events ?? new OutboxEventPublisher();
+    this.events = dependencies.events ?? new DomainEventRecorder();
     this.feedRanking = new FeedRankingService();
     this.mediaStorage = dependencies.mediaStorage ?? new CloudinaryMediaStorage();
     this.mediaAssets = dependencies.mediaAssets ?? new MediaAssetRepository();

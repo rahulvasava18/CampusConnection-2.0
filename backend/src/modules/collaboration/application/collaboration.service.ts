@@ -22,7 +22,8 @@ import type {
 } from '@campusconnection/shared';
 import { decodeCursor, encodeCursor } from '@campusconnection/shared';
 import { AppError } from '../../../shared/errors/app-error';
-import { OutboxEventPublisher } from '../../../infrastructure/events/event-publisher';
+import { DomainEventRecorder } from '../../../infrastructure/events/domain-event';
+import { dispatchCoreEvents } from '../../../infrastructure/events/direct-event-dispatcher';
 import { UserRepository } from '../../identity/infrastructure/identity.repositories';
 import { BlockRepository } from '../../social/infrastructure/social.repositories';
 import { withMongoTransaction } from './collaboration.transaction';
@@ -79,7 +80,7 @@ interface CollaborationDependencies {
   eventRecords?: EventRepository;
   users?: UserRepository;
   blocks?: BlockRepository;
-  events?: OutboxEventPublisher;
+  events?: DomainEventRecorder;
 }
 
 export class CollaborationService {
@@ -91,7 +92,7 @@ export class CollaborationService {
   private readonly eventRecords: EventRepository;
   private readonly users: UserRepository;
   private readonly blocks: BlockRepository;
-  private readonly events: OutboxEventPublisher;
+  private readonly events: DomainEventRecorder;
   public constructor(dependencies: CollaborationDependencies = {}) {
     this.communities = dependencies.communities ?? new CommunityRepository();
     this.discussions = dependencies.discussions ?? new DiscussionRepository();
@@ -101,7 +102,7 @@ export class CollaborationService {
     this.eventRecords = dependencies.eventRecords ?? new EventRepository();
     this.users = dependencies.users ?? new UserRepository();
     this.blocks = dependencies.blocks ?? new BlockRepository();
-    this.events = dependencies.events ?? new OutboxEventPublisher();
+    this.events = dependencies.events ?? new DomainEventRecorder();
   }
   private id(value: string) {
     return new Types.ObjectId(value);
@@ -3940,7 +3941,7 @@ export class CollaborationService {
     }
     if (!updated)
       throw new AppError('REGISTRATION_NOT_FOUND', 'The event registration was not found.', 404);
-    await this.events.record({
+    const recordedEvent = await this.events.record({
       eventType: 'EVENT_UPDATED',
       producer: 'collaboration',
       aggregateType: 'EVENT_REGISTRATION',
@@ -3949,6 +3950,7 @@ export class CollaborationService {
       correlationId,
       payload: { eventId, userId: updated.userId.toString() },
     });
+    await dispatchCoreEvents([recordedEvent]);
     const user = await this.users.findById(updated.userId.toString());
     return this.eventRegistrationView(updated, user ?? undefined);
   }

@@ -10,7 +10,7 @@ import { AppError } from '../../../shared/errors/app-error';
 import {
   NotificationModel,
   type NotificationDocument,
-} from '../../../infrastructure/async/async.models';
+} from '../infrastructure/notification.model';
 
 export interface NotificationActor {
   userId: string;

@@ -13,7 +13,6 @@
     "dev:shared": "npm run build -w @campusconnection/shared",
     "dev:api": "npm run dev:shared && npm run dev -w @campusconnection/backend -- api",
     "dev:realtime": "npm run dev:shared && npm run dev -w @campusconnection/backend -- realtime",
-    "dev:worker": "npm run dev:shared && npm run dev -w @campusconnection/backend -- worker",
     "dev:web": "npm run dev -w @campusconnection/frontend",
     "typecheck": "npm run build -w @campusconnection/shared && npm run typecheck -w @campusconnection/backend && npm run typecheck -w @campusconnection/frontend",
     "lint": "eslint .",

@@ -1,10 +1,10 @@
 # CampusConnection
 
-CampusConnection is a campus-focused social application for student interaction, networking, communities, teams, projects, events, recommendations, and communication. The repository contains the current web application, API, realtime gateway, background worker, and shared TypeScript package.
+CampusConnection is a campus-focused social application for student interaction, networking, communities, teams, projects, events, recommendations, and communication. The repository contains the current web application, API, realtime gateway, and shared TypeScript package.
 
 ## Current Architecture
 
-CampusConnection is a TypeScript monorepo with independently runnable frontend, API, realtime, and worker processes.
+CampusConnection is a TypeScript monorepo with independently runnable frontend, API, and realtime processes.
 
 ```text
 React/Vite frontend
@@ -17,20 +17,18 @@ React/Vite frontend
         |
         +--> Socket.IO realtime process --> Redis adapter
 
-BullMQ worker process --> Redis queues --> MongoDB-backed domain data
-
 packages/shared
         |
         +--> shared TypeScript contracts used by frontend and backend
 ```
 
-The backend uses MongoDB as durable authoritative storage. Redis supports caching, rate limiting, realtime coordination, and BullMQ. The realtime process is authenticated separately through the existing access-token/session model. Cloudinary is the current image-storage provider behind a media-storage abstraction. Email delivery is provider-abstracted: local development may use Gmail SMTP, while production uses the Resend HTTPS API through the worker.
+The backend uses MongoDB as durable authoritative storage. Redis supports caching, rate limiting, realtime coordination, Socket.IO adapter state, and presence. The realtime process is authenticated separately through the existing access-token/session model. Cloudinary is the current image-storage provider behind a media-storage abstraction. Email delivery is provider-abstracted: local development may use Gmail SMTP, while production uses the Resend HTTPS API directly from the API process.
 
 ## Repository Structure
 
 ```text
 App/
-├── backend/              Express API, realtime gateway, worker, modules, and tests
+├── backend/              Express API, realtime gateway, modules, and tests
 ├── frontend/             React/Vite application
 ├── packages/shared/      Shared TypeScript types and contracts
 ├── tests/e2e/            Playwright browser tests
@@ -72,7 +70,6 @@ App/
 
 - MongoDB 7 with a local replica-set-capable Docker configuration
 - Redis 7
-- BullMQ for background jobs
 - Socket.IO with the Redis adapter for realtime communication
 - Cloudinary for the current image-storage implementation
 - Resend HTTPS email delivery in production, with local Gmail SMTP support
@@ -100,7 +97,7 @@ Environment files are local configuration and must never be committed. Copy the 
 - `frontend/.env.example` — frontend Vite configuration reference.
 - `backend/.env.test.example` — isolated QA/test configuration reference.
 
-Backend variables cover runtime ports, MongoDB, Redis, CORS, JWT/session and CSRF settings, email provider configuration, Cloudinary, queues, outbox processing, search, realtime limits, and rate limits. Frontend variables use the `VITE_` prefix for the API and realtime URLs. Secrets, passwords, tokens, private keys, SMTP credentials, email API keys, and Cloudinary secrets belong only in local or hosting-provider secret configuration.
+Backend variables cover runtime ports, MongoDB, Redis, CORS, JWT/session and CSRF settings, email provider configuration, Cloudinary, search, realtime limits, and rate limits. Frontend variables use the `VITE_` prefix for the API and realtime URLs. Secrets, passwords, tokens, private keys, SMTP credentials, email API keys, and Cloudinary secrets belong only in local or hosting-provider secret configuration.
 
 ## Local Development
 
@@ -123,11 +120,10 @@ Run each application process in its own terminal:
 ```bash
 npm run dev:api
 npm run dev:realtime
-npm run dev:worker
 npm run dev:web
 ```
 
-The API, realtime, and worker commands independently build the shared package before starting their process. If only the frontend is being run, build the shared package first:
+The API and realtime commands independently build the shared package before starting their process. If only the frontend is being run, build the shared package first:
 
 ```bash
 npm run dev:shared
@@ -190,7 +186,7 @@ GET /health
 GET /ready
 ```
 
-Readiness reports MongoDB, Redis, and BullMQ dependency state. The worker process does not expose an HTTP endpoint.
+Readiness reports MongoDB and Redis dependency state.
 
 ## Production Overview
 
@@ -205,12 +201,9 @@ Hosted frontend
        |
        +--> Socket.IO realtime process
 
-Managed worker process --> Managed Redis queues
-
 API services --> Cloudinary media storage
-Managed worker --> Resend HTTPS email provider
 
-Production API, realtime, and worker services must each receive the shared backend configuration.
+Production API and realtime services must each receive the shared backend configuration.
 At minimum, Render must explicitly provide `MONGO_URI`, `MONGO_DB_NAME`, `REDIS_URL`,
 `CORS_ORIGINS`, `WEB_ORIGIN`, `FRONTEND_URL`, `EMAIL_PROVIDER=resend`, `EMAIL_API_URL`,
 `EMAIL_API_KEY`, `EMAIL_FROM`, inline RS256 JWT keys, and `COOKIE_SECURE=true`. Missing or local
@@ -239,13 +232,13 @@ CampusConnection is currently being prepared for production deployment. Producti
 
 ```text
 Development
-local Vite, API, realtime, and worker processes
+local Vite, API, and realtime processes
 local MongoDB replica set and Redis via Docker Compose
 local environment files
 
 Production
 hosted frontend
-independently hosted API, realtime, and worker processes
+independently hosted API and realtime processes
 managed MongoDB and Redis
 provider-managed secrets and HTTPS
 ```

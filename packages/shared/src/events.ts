@@ -1,5 +1,4 @@
 export type EventType =
-  | 'VERIFICATION_EMAIL_REQUESTED'
   | 'USER_REGISTERED'
   | 'USER_LOGGED_IN'
   | 'USER_VERIFIED'
@@ -113,28 +112,4 @@ export interface EventEnvelope<TPayload = Record<string, unknown>> {
   correlationId: string;
   causationId?: string;
   payload: TPayload;
-}
-
-export const EVENT_QUEUE_NAMES = {
-  events: 'events',
-  notifications: 'notifications',
-  email: 'email',
-  analytics: 'analytics',
-  recommendation: 'recommendation',
-  feed: 'feed',
-  media: 'media',
-  searchIndex: 'search-index',
-  cleanup: 'cleanup',
-  scheduler: 'scheduler',
-} as const;
-
-export type EventQueueName = (typeof EVENT_QUEUE_NAMES)[keyof typeof EVENT_QUEUE_NAMES];
-
-export interface EventJobPayload {
-  eventId: string;
-  eventType: EventType;
-  eventVersion: number;
-  schemaVersion: number;
-  correlationId: string;
-  causationId?: string;
 }

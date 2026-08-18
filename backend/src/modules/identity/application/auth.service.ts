@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 import mongoose, { Types } from 'mongoose';
 import type { AccountState, EventType, SessionView, UserView } from '@campusconnection/shared';
 import { AppError } from '../../../shared/errors/app-error';
-import { OutboxEventPublisher } from '../../../infrastructure/events/event-publisher';
+import {
+  DomainEventRecorder,
+  discardRecordedEvents,
+  takeRecordedEvents,
+} from '../../../infrastructure/events/domain-event';
+import { dispatchCoreEvents } from '../../../infrastructure/events/direct-event-dispatcher';
 import { logger } from '../../../shared/logging/logger';
 import { getEnv } from '../../../config/env';
 import {
@@ -27,6 +32,11 @@ import {
 import { type UserDocument } from '../infrastructure/user.model';
 import { toUserView } from './user.mapper';
 import type { AuthContext, RequestMeta } from '../interfaces/auth.types';
+import {
+  createEmailService,
+  type EmailService,
+  type VerificationEmailInput,
+} from '../infrastructure/email.service';
 
 export interface ProfileUpdateInput {
   displayName?: string;
@@ -55,8 +65,9 @@ interface ServiceDependencies {
   pendingSignups?: PendingSignupRepository;
   sessions?: SessionRepository;
   audits?: SecurityAuditRepository;
-  events?: OutboxEventPublisher;
+  events?: DomainEventRecorder;
   rateLimiter?: RedisRateLimiter;
+  emailService?: EmailService;
 }
 
 export class AuthService {
@@ -65,8 +76,9 @@ export class AuthService {
   private readonly pendingSignups: PendingSignupRepository;
   private readonly sessions: SessionRepository;
   private readonly audits: SecurityAuditRepository;
-  private readonly events: OutboxEventPublisher;
+  private readonly events: DomainEventRecorder;
   private readonly rateLimiter: RedisRateLimiter;
+  private emailService: EmailService | undefined;
 
   public constructor(dependencies: ServiceDependencies = {}) {
     this.users = dependencies.users ?? new UserRepository();
@@ -74,8 +86,9 @@ export class AuthService {
     this.pendingSignups = dependencies.pendingSignups ?? new PendingSignupRepository();
     this.sessions = dependencies.sessions ?? new SessionRepository();
     this.audits = dependencies.audits ?? new SecurityAuditRepository();
-    this.events = dependencies.events ?? new OutboxEventPublisher();
+    this.events = dependencies.events ?? new DomainEventRecorder();
     this.rateLimiter = dependencies.rateLimiter ?? new RedisRateLimiter();
+    this.emailService = dependencies.emailService;
   }
 
   public async signup(
@@ -87,6 +100,8 @@ export class AuthService {
     const username = normalizeUsername(input.username);
     const passwordHash = await hashPassword(input.password);
     const correlationId = meta.correlationId ?? meta.requestId ?? randomUUID();
+    let verificationToken = '';
+    let verificationDisplayName = '';
     try {
       await this.transaction(async (session) => {
         const existing = await this.users.findByEmail(email, session);
@@ -112,21 +127,8 @@ export class AuthService {
           },
           session,
         );
-        await this.events.record(
-          {
-            eventType: 'VERIFICATION_EMAIL_REQUESTED',
-            producer: 'identity',
-            aggregateType: 'PendingSignup',
-            aggregateId: signup.id,
-            correlationId,
-            payload: {
-              to: email,
-              displayName: signup.displayName,
-              token,
-            },
-          },
-          session,
-        );
+        verificationToken = token;
+        verificationDisplayName = signup.displayName;
       });
     } catch (error) {
       if (isDuplicateKeyError(error))
@@ -137,6 +139,15 @@ export class AuthService {
         );
       throw error;
     }
+    await this.sendVerificationEmail(
+      {
+        to: email,
+        displayName: verificationDisplayName,
+        token: verificationToken,
+        idempotencyKey: correlationId,
+      },
+      correlationId,
+    );
     return { email };
   }
 
@@ -267,6 +278,7 @@ export class AuthService {
     const pendingSignup = await this.pendingSignups.findByIdentifier(normalized);
     if (pendingSignup) {
       const token = createOpaqueToken(32);
+      const correlationId = meta.correlationId ?? meta.requestId ?? randomUUID();
       await this.transaction(async (session) => {
         await this.pendingSignups.replaceToken(
           pendingSignup,
@@ -274,22 +286,16 @@ export class AuthService {
           new Date(Date.now() + 30 * 60 * 1000),
           session,
         );
-        await this.events.record(
-          {
-            eventType: 'VERIFICATION_EMAIL_REQUESTED',
-            producer: 'identity',
-            aggregateType: 'PendingSignup',
-            aggregateId: pendingSignup.id,
-            correlationId: meta.correlationId ?? meta.requestId ?? randomUUID(),
-            payload: {
-              to: pendingSignup.emailNormalized,
-              displayName: pendingSignup.displayName,
-              token,
-            },
-          },
-          session,
-        );
       });
+      await this.sendVerificationEmail(
+        {
+          to: pendingSignup.emailNormalized,
+          displayName: pendingSignup.displayName,
+          token,
+          idempotencyKey: correlationId,
+        },
+        correlationId,
+      );
       return { email: pendingSignup.emailNormalized };
     }
     const user = await this.users.findByIdentifier(normalized);
@@ -307,6 +313,7 @@ export class AuthService {
       );
     this.assertCanAuthenticate(user);
     const token = createOpaqueToken(32);
+    const correlationId = meta.correlationId ?? meta.requestId ?? randomUUID();
     await this.transaction(async (session) => {
       await this.emailVerifications.deleteForUser(user._id, session);
       await this.emailVerifications.create(
@@ -317,24 +324,39 @@ export class AuthService {
         },
         session,
       );
-      await this.events.record(
-        {
-          eventType: 'VERIFICATION_EMAIL_REQUESTED',
-          producer: 'identity',
-          aggregateType: 'User',
-          aggregateId: user.id,
-          actorId: user.id,
-          correlationId: meta.correlationId ?? meta.requestId ?? randomUUID(),
-          payload: {
-            to: user.email,
-            displayName: user.displayName,
-            token,
-          },
-        },
-        session,
-      );
     });
+    await this.sendVerificationEmail(
+      {
+        to: user.email,
+        displayName: user.displayName,
+        token,
+        idempotencyKey: correlationId,
+      },
+      correlationId,
+    );
     return { email: user.email };
+  }
+
+  private async sendVerificationEmail(
+    input: VerificationEmailInput,
+    correlationId: string,
+  ): Promise<void> {
+    const provider = getEnv().EMAIL_PROVIDER;
+    logger.info({ provider, correlationId }, 'Verification email send started');
+    try {
+      const service = (this.emailService ??= createEmailService());
+      await service.sendVerificationEmail(input);
+      logger.info({ provider, correlationId }, 'Verification email delivered');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Email provider request failed.';
+      logger.error({ provider, correlationId, err: { message } }, 'Verification email delivery failed');
+      if (error instanceof AppError) throw error;
+      throw new AppError(
+        'EMAIL_DELIVERY_FAILED',
+        'Unable to send the verification email. Please try again.',
+        503,
+      );
+    }
   }
 
   public async login(
@@ -636,8 +658,10 @@ export class AuthService {
       await session.withTransaction(async () => {
         result = await work(session);
       });
+      await dispatchCoreEvents(takeRecordedEvents(session));
       return result as T;
     } finally {
+      discardRecordedEvents(session);
       await session.endSession();
     }
   }
