@@ -12,9 +12,9 @@ import {
   MessageCircle,
   Rocket,
   Search,
+  Settings2,
   Users,
 } from 'lucide-react';
-import { CampusSettingsIcon } from '../../components/icons/CampusIcons';
 import type { LucideIcon } from 'lucide-react';
 import { CommunicationHome } from '../../features/communication/CommunicationHome';
 import { DiscoveryHome } from '../../features/discovery/DiscoveryHome';
@@ -426,7 +426,7 @@ export function ProfilePage({ user }: { user: AppUser }) {
               </div>
             </div>
             <Button variant="secondary" size="sm">
-              <CampusSettingsIcon className="h-4 w-4" />
+              <Settings2 className="h-4 w-4" />
               Edit profile
             </Button>
           </div>

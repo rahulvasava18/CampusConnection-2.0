@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Bell, Menu, Network, Search, UserRound, X } from 'lucide-react';
+import { Bell, Menu, Network, Search, Settings2, UserRound, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../store/app-store';
 import type { useAuthStore } from '../features/auth/auth.store';
@@ -7,7 +7,7 @@ import { getUnreadNotificationCount } from '../features/notifications/notificati
 import { Avatar } from './ui';
 import { primaryNav, workspaceNav } from '../lib/navigation';
 import { useTheme } from '../theme/ThemeProvider';
-import { CampusMoonIcon, CampusSettingsIcon, CampusSunIcon } from './icons/CampusIcons';
+import { CampusMoonIcon, CampusSunIcon } from './icons/CampusIcons';
 
 type AppUser = NonNullable<ReturnType<typeof useAuthStore.getState>['user']>;
 type Navigate = (target: string) => void;
@@ -105,7 +105,7 @@ export function Navbar({ onNavigate, user }: { onNavigate: Navigate; user: AppUs
           onClick={() => onNavigate('settings')}
           className="hidden min-h-11 min-w-11 rounded-xl p-2.5 text-slate-500 hover:bg-brand-50 sm:block"
         >
-          <CampusSettingsIcon className="h-5 w-5" />
+          <Settings2 className="h-5 w-5" />
         </button>
         <button
           type="button"
@@ -130,7 +130,7 @@ export function MobileNavigation({ onNavigate }: { onNavigate: Navigate }) {
     ...primaryNav,
     ...workspaceNav,
     { id: 'profile' as const, label: 'Profile', icon: UserRound },
-    { id: 'settings' as const, label: 'Settings', icon: CampusSettingsIcon },
+    { id: 'settings' as const, label: 'Settings', icon: Settings2 },
   ];
   return (
     <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-label="Navigation menu">
