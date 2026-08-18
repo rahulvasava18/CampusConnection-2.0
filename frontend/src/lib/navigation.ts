@@ -1,15 +1,15 @@
+import type { ComponentType, SVGProps } from 'react';
 import {
   CalendarDays,
   FolderKanban,
   Home,
-  MessageCircle,
   Network,
   PenLine,
   Sparkles,
   Users,
   SearchIcon,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { CampusMessagesIcon } from '../components/icons/CampusIcons';
 
 export type RouteId =
   | 'home'
@@ -39,7 +39,7 @@ export type RouteId =
 export type NavItem = {
   id: RouteId;
   label: string;
-  icon: LucideIcon;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
 };
 
 export const routePaths: Partial<Record<RouteId, string>> = {
@@ -62,7 +62,7 @@ export const primaryNav: NavItem[] = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'search', label: 'Search', icon: SearchIcon },
   { id: 'post', label: 'Post', icon: PenLine },
-  { id: 'messages', label: 'Messages', icon: MessageCircle },
+  { id: 'messages', label: 'Messages', icon: CampusMessagesIcon },
   { id: 'recommendations', label: 'For you', icon: Sparkles },
 ];
 

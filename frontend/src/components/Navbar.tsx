@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react';
-import { Bell, Menu, Network, Search, Settings2, UserRound, X } from 'lucide-react';
+import { Bell, Menu, Network, Search, UserRound, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../store/app-store';
 import type { useAuthStore } from '../features/auth/auth.store';
 import { getUnreadNotificationCount } from '../features/notifications/notifications.api';
 import { Avatar } from './ui';
 import { primaryNav, workspaceNav } from '../lib/navigation';
+import { useTheme } from '../theme/ThemeProvider';
+import { CampusMoonIcon, CampusSettingsIcon, CampusSunIcon } from './icons/CampusIcons';
 
 type AppUser = NonNullable<ReturnType<typeof useAuthStore.getState>['user']>;
 type Navigate = (target: string) => void;
@@ -30,6 +32,7 @@ export function Brand() {
 }
 
 export function Navbar({ onNavigate, user }: { onNavigate: Navigate; user: AppUser }) {
+  const { theme, toggleTheme } = useTheme();
   const [query, setQuery] = useState(useAppStore.getState().discoveryQuery);
   const setDiscoveryQuery = useAppStore((state) => state.setDiscoveryQuery);
   const toggleNavigation = useAppStore((state) => state.toggleNavigation);
@@ -85,11 +88,24 @@ export function Navbar({ onNavigate, user }: { onNavigate: Navigate; user: AppUs
         </button>
         <button
           type="button"
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          onClick={toggleTheme}
+          className="min-h-11 min-w-11 rounded-xl p-2.5 text-slate-500 hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+        >
+          {theme === 'dark' ? (
+            <CampusSunIcon className="h-5 w-5" />
+          ) : (
+            <CampusMoonIcon className="h-5 w-5" />
+          )}
+        </button>
+        <button
+          type="button"
           aria-label="Settings"
           onClick={() => onNavigate('settings')}
           className="hidden min-h-11 min-w-11 rounded-xl p-2.5 text-slate-500 hover:bg-brand-50 sm:block"
         >
-          <Settings2 className="h-5 w-5" />
+          <CampusSettingsIcon className="h-5 w-5" />
         </button>
         <button
           type="button"
@@ -114,7 +130,7 @@ export function MobileNavigation({ onNavigate }: { onNavigate: Navigate }) {
     ...primaryNav,
     ...workspaceNav,
     { id: 'profile' as const, label: 'Profile', icon: UserRound },
-    { id: 'settings' as const, label: 'Settings', icon: Settings2 },
+    { id: 'settings' as const, label: 'Settings', icon: CampusSettingsIcon },
   ];
   return (
     <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-label="Navigation menu">

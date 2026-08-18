@@ -7,7 +7,7 @@ export function cn(...classes: Array<string | false | null | undefined>) {
 
 const buttonVariants = {
   primary:
-    'bg-brand-500 text-slate-900 shadow-[0_6px_18px_rgba(15,23,42,.08)] hover:-translate-y-px hover:bg-brand-600 hover:shadow-[0_10px_24px_rgba(15,23,42,.12)] active:translate-y-0 active:scale-[.98]',
+    'button-primary bg-brand-500 text-slate-900 shadow-[0_6px_18px_rgba(15,23,42,.08)] hover:-translate-y-px hover:bg-brand-600 hover:shadow-[0_10px_24px_rgba(15,23,42,.12)] active:translate-y-0 active:scale-[.98]',
   secondary:
     'border border-line-strong bg-brand-100 text-slate-800 shadow-sm hover:-translate-y-px hover:border-brand-400 hover:bg-brand-200 active:translate-y-0 active:scale-[.98]',
   ghost: 'text-slate-600 hover:bg-brand-50 hover:text-brand-700 active:scale-[.98]',
@@ -119,7 +119,7 @@ export function Badge({
         'type-ui inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide',
         tone === 'neutral' && 'bg-slate-100 text-slate-700',
         tone === 'brand' && 'bg-brand-100 text-brand-800',
-        tone === 'success' && 'bg-[#e6f5f2] text-[#006b60]',
+        tone === 'success' && 'bg-[var(--status-success-bg)] text-[var(--status-success-text)]',
         tone === 'warning' && 'bg-yellow-light text-yellow-dark',
         tone === 'danger' && 'bg-red-light text-red-dark',
       )}

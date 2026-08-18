@@ -1,13 +1,12 @@
 import { ChevronRight } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import { useAppStore } from '../store/app-store';
 import { cn } from './ui';
-import { primaryNav, workspaceNav, type RouteId } from '../lib/navigation';
+import { primaryNav, workspaceNav, type NavItem } from '../lib/navigation';
 
 export function Sidebar({ onNavigate }: { onNavigate: (target: string) => void }) {
   const activeSection = useAppStore((state) => state.activeSection);
   const renderItem = (
-    item: { id: RouteId; label: string; icon: LucideIcon },
+    item: NavItem,
     showChevron = false,
   ) => {
     const Icon = item.icon;

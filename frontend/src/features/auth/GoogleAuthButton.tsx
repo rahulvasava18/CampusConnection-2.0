@@ -43,7 +43,7 @@ export function GoogleAuthButton() {
     <div className="grid gap-2.5">
       <button
         type="button"
-        className="relative flex min-h-[48px] w-full items-center justify-center rounded-[4px] border border-[#dadce0] bg-white px-4 text-sm font-medium text-[#3c4043] shadow-sm transition hover:border-[#c7cacf] hover:bg-[#f8f9fa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a73e8]/40 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+        className="google-auth-button relative flex min-h-[48px] w-full items-center justify-center rounded-[4px] border border-[#dadce0] bg-white px-4 text-sm font-medium text-[#3c4043] shadow-sm transition hover:border-[#c7cacf] hover:bg-[#f8f9fa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a73e8]/40 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
         onClick={startGoogleSignIn}
         disabled={redirecting}
         aria-busy={redirecting}
