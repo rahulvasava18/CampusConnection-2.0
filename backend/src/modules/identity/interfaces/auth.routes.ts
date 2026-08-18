@@ -3,7 +3,8 @@ import type { AuthService } from '../application/auth.service';
 import { validateRequest } from '../../../shared/validation/validate';
 import { requireAuth } from '../security/auth.middleware';
 import { requireCsrf } from '../security/csrf.middleware';
-import { clearAuthCookies, parseCookies, setAuthCookies } from '../../../shared/http/cookies';
+import { clearAuthCookies, parseCookies, setAuthCookies, setCsrfCookie } from '../../../shared/http/cookies';
+import { createOpaqueToken } from '../security/token.service';
 import { getEnv } from '../../../config/env';
 import { AppError } from '../../../shared/errors/app-error';
 import {
@@ -45,12 +46,23 @@ function sendSession(
 ) {
   setAuthCookies(res, result.refreshToken, result.csrfToken);
   return {
-    data: { user: result.user, accessToken: result.accessToken, sessionId: result.sessionId },
+    data: {
+      user: result.user,
+      accessToken: result.accessToken,
+      sessionId: result.sessionId,
+      csrfToken: result.csrfToken,
+    },
   };
 }
 
 export function createAuthRouter(authService: AuthService): Router {
   const router = Router();
+
+  router.get('/csrf', (_req, res) => {
+    const csrfToken = createOpaqueToken();
+    setCsrfCookie(res, csrfToken);
+    res.status(200).json({ data: { csrfToken } });
+  });
 
   router.get('/google', async (_req, res, next) => {
     try {

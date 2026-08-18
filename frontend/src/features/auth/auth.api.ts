@@ -14,12 +14,16 @@ function isPaginatedResponse(value: unknown): value is { data: unknown; paginati
 export interface SessionResponse {
   user: UserView;
   accessToken: string;
+  csrfToken: string;
   sessionId: string;
 }
 
 let refreshInFlight: Promise<SessionResponse> | undefined;
+let csrfBootstrapInFlight: Promise<string> | undefined;
 
 function csrfToken(): string | undefined {
+  const sessionToken = useAuthStore.getState().csrfToken;
+  if (sessionToken) return sessionToken;
   return document.cookie
     .split('; ')
     .find((part) => part.startsWith('cc_csrf='))
@@ -88,7 +92,7 @@ export function login(input: { identifier: string; password: string }): Promise<
     method: 'POST',
     body: JSON.stringify(input),
   }).then((result) => {
-    useAuthStore.getState().setSession(result.accessToken, result.user);
+    useAuthStore.getState().setSession(result.accessToken, result.user, result.csrfToken);
     return result;
   });
 }
@@ -112,7 +116,7 @@ export function exchangeGoogleCode(code: string): Promise<GoogleExchangeResponse
     body: JSON.stringify({ code }),
   }).then((result) => {
     if (!('onboardingRequired' in result))
-      useAuthStore.getState().setSession(result.accessToken, result.user);
+      useAuthStore.getState().setSession(result.accessToken, result.user, result.csrfToken);
     return result;
   });
 }
@@ -136,7 +140,7 @@ export function completeGoogleOnboarding(input: {
     method: 'POST',
     body: JSON.stringify(input),
   }).then((result) => {
-    useAuthStore.getState().setSession(result.accessToken, result.user);
+    useAuthStore.getState().setSession(result.accessToken, result.user, result.csrfToken);
     return result;
   });
 }
@@ -153,15 +157,34 @@ export function resendVerification(input: {
 
 export function refreshSession(): Promise<SessionResponse> {
   if (refreshInFlight) return refreshInFlight;
-  refreshInFlight = apiRequest<SessionResponse>('/auth/refresh', { method: 'POST' }, false)
+  refreshInFlight = ensureCsrfToken()
+    .then(() => apiRequest<SessionResponse>('/auth/refresh', { method: 'POST' }, false))
     .then((result) => {
-      useAuthStore.getState().setSession(result.accessToken, result.user);
+      useAuthStore.getState().setSession(result.accessToken, result.user, result.csrfToken);
       return result;
     })
     .finally(() => {
       refreshInFlight = undefined;
     });
   return refreshInFlight;
+}
+
+function ensureCsrfToken(): Promise<string> {
+  const current = useAuthStore.getState().csrfToken ?? csrfToken();
+  if (current) {
+    useAuthStore.getState().setCsrfToken(current);
+    return Promise.resolve(current);
+  }
+  if (csrfBootstrapInFlight) return csrfBootstrapInFlight;
+  csrfBootstrapInFlight = apiRequest<{ csrfToken: string }>('/auth/csrf', {}, false)
+    .then((result) => {
+      useAuthStore.getState().setCsrfToken(result.csrfToken);
+      return result.csrfToken;
+    })
+    .finally(() => {
+      csrfBootstrapInFlight = undefined;
+    });
+  return csrfBootstrapInFlight;
 }
 
 export async function getCurrentUser(): Promise<UserView> {

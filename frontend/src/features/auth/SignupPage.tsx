@@ -1,7 +1,6 @@
 import { ShieldCheck } from 'lucide-react';
-import { Button } from '../../components/ui';
 import { AuthLayout, navigateAuth } from './AuthLayout';
-import { continueWithGoogle } from './auth.api';
+import { GoogleAuthButton } from './GoogleAuthButton';
 
 export function SignupPage() {
   return (
@@ -23,10 +22,7 @@ export function SignupPage() {
       }
     >
       <div className="grid gap-5">
-        <Button type="button" size="lg" className="w-full" onClick={continueWithGoogle}>
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-black text-brand-700">G</span>
-          Continue with Google
-        </Button>
+        <GoogleAuthButton />
         <p className="flex gap-2 rounded-xl bg-brand-50 px-3 py-3 text-xs leading-5 text-brand-800">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
           Your Google email is verified before your CampusConnection account is created. No password is required during signup.

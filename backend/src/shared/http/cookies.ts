@@ -48,6 +48,17 @@ export function setAuthCookies(
       maxAge,
     }),
   );
+  setCsrfCookie(res, csrfToken);
+}
+
+export function setCsrfCookie(
+  res: { append(name: string, value: string): void },
+  csrfToken: string,
+): void {
+  const env = getEnv();
+  const sameSite =
+    env.COOKIE_SAME_SITE === 'strict' ? 'Strict' : env.COOKIE_SAME_SITE === 'none' ? 'None' : 'Lax';
+  const maxAge = env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60;
   res.append(
     'Set-Cookie',
     serializeCookie(env.CSRF_COOKIE_NAME, csrfToken, {

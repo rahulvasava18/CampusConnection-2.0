@@ -15,6 +15,16 @@ export const openApiDocument = {
       refreshCookie: { type: 'apiKey', in: 'cookie', name: 'cc_refresh' },
     },
     schemas: {
+      Session: {
+        type: 'object',
+        required: ['user', 'accessToken', 'csrfToken', 'sessionId'],
+        properties: {
+          user: { $ref: '#/components/schemas/User' },
+          accessToken: { type: 'string' },
+          csrfToken: { type: 'string' },
+          sessionId: { type: 'string' },
+        },
+      },
       ApiError: {
         type: 'object',
         required: ['error'],
@@ -57,6 +67,12 @@ export const openApiDocument = {
   paths: {
     '/health': { get: { summary: 'Process liveness' } },
     '/ready': { get: { summary: 'Dependency readiness' } },
+    '/auth/csrf': {
+      get: {
+        summary: 'Bootstrap a CSRF cookie and token for the frontend origin',
+        responses: { '200': { description: 'CSRF token returned' } },
+      },
+    },
     '/auth/signup': {
       post: {
         summary: 'Legacy signup endpoint; new accounts use Google onboarding',

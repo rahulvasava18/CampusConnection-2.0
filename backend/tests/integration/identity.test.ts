@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app';
+import type { AuthService } from '../../src/modules/identity/application/auth.service';
 
 const app = createApp();
 
@@ -32,5 +33,29 @@ describe('password identity API', () => {
     });
     expect(legacySignup.status).toBe(410);
     expect(legacySignup.body.error.code).toBe('GOOGLE_SIGNUP_REQUIRED');
+  });
+
+  it('returns the fresh CSRF token with a Google session', async () => {
+    const authService = {
+      exchangeGoogleCode: async () => ({
+        onboardingRequired: false as const,
+        user: {},
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        csrfToken: 'session-csrf-token',
+        sessionId: 'session-id',
+      }),
+    } as unknown as AuthService;
+    const googleApp = createApp({ authService });
+
+    const response = await request(googleApp)
+      .post('/api/auth/google/exchange')
+      .send({ code: 'handoff-token-123456789012345678901234' });
+    const setCookie = response.headers['set-cookie'];
+    const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.csrfToken).toBe('session-csrf-token');
+    expect(cookies.some((cookie) => cookie?.includes('cc_csrf='))).toBe(true);
   });
 });

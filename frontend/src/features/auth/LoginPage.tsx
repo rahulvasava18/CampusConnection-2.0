@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Eye, EyeOff, LoaderCircle, MailCheck } from 'lucide-react';
 import { ApiRequestError } from '../../lib/api-state';
 import { Button, ErrorState, Field } from '../../components/ui';
-import { continueWithGoogle, login, resendVerification } from './auth.api';
+import { login, resendVerification } from './auth.api';
 import { AuthLayout, navigateAuth } from './AuthLayout';
+import { GoogleAuthButton } from './GoogleAuthButton';
 
 export function LoginPage() {
   const [identifier, setIdentifier] = useState('');
@@ -142,10 +143,7 @@ export function LoginPage() {
           or
           <span className="h-px flex-1 bg-line" />
         </div>
-        <Button type="button" variant="secondary" size="lg" className="w-full" onClick={continueWithGoogle}>
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-black text-brand-700">G</span>
-          Continue with Google
-        </Button>
+        <GoogleAuthButton />
       </form>
     </AuthLayout>
   );
