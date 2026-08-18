@@ -14,7 +14,11 @@ export function LoginPage() {
   const [verificationRequired, setVerificationRequired] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).has('accountDeleted')
+      ? 'Your account was permanently deleted.'
+      : null,
+  );
   const [passwordNotSet, setPasswordNotSet] = useState(false);
   const googleError = new URLSearchParams(window.location.search).has('googleError');
 

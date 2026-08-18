@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   Bell,
   BriefcaseBusiness,
   CalendarDays,
@@ -15,8 +16,10 @@ import {
   ShieldCheck,
   Smartphone,
   SlidersHorizontal,
+  Trash2,
   Tablet,
   Users,
+  X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -33,7 +36,7 @@ import {
 } from '../../components/ui';
 import { apiErrorMessage, isRestrictedApiError } from '../../lib/api-state';
 import { useAuthStore } from '../../features/auth/auth.store';
-import { updateProfile } from '../../features/auth/auth.api';
+import { deleteAccount, updateProfile } from '../../features/auth/auth.api';
 import type { SessionDeviceType } from '../../features/settings/session.utils';
 import { parseUserAgent } from '../../features/settings/session.utils';
 import {
@@ -123,6 +126,7 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const settings = useQuery({ queryKey: ['settings'], queryFn: getSettings });
   const sessions = useQuery({
@@ -181,6 +185,24 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
       queryClient.setQueryData(['settings'], data);
     },
   });
+  const deleteMutation = useMutation({
+    mutationFn: deleteAccount,
+    onSuccess: () => {
+      queryClient.clear();
+      useAuthStore.getState().clearSession();
+      window.location.assign('/login?accountDeleted=1');
+    },
+  });
+
+  useEffect(() => {
+    if (!deleteDialogOpen) return;
+    document.getElementById('delete-account-cancel')?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !deleteMutation.isPending) setDeleteDialogOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [deleteDialogOpen, deleteMutation.isPending]);
 
   const updatePreference = <
     Section extends keyof UserPreferences,
@@ -318,6 +340,41 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
               >
                 <LogOut className="h-4 w-4" />
                 Sign out
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="border-red-200 bg-red-50/40 p-5 sm:p-6">
+            <div className="flex items-start gap-3">
+              <span className="rounded-xl bg-red-100 p-2.5 text-red-700">
+                <AlertTriangle className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="font-display text-lg font-bold text-red-900">Danger zone</h2>
+                <p className="mt-1 text-sm leading-6 text-red-800/80">
+                  Permanently remove your account and the data you own. Shared spaces with active
+                  collaborators must be transferred before deletion.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col gap-3 rounded-xl border border-red-200 bg-white/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-red-900">Delete account</h3>
+                <p className="mt-1 text-xs leading-5 text-red-800/75">
+                  This action is permanent and cannot be undone.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => {
+                  deleteMutation.reset();
+                  setDeleteDialogOpen(true);
+                }}
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete account
               </Button>
             </div>
           </Card>
@@ -569,6 +626,77 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
           ) : null}
         </div>
       </div>
+
+      {deleteDialogOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-6 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-account-title"
+            aria-describedby="delete-account-description"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <span className="rounded-xl bg-red-100 p-2.5 text-red-700">
+                  <AlertTriangle className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 id="delete-account-title" className="text-lg font-bold text-red-900">
+                    Delete account permanently?
+                  </h2>
+                  <p id="delete-account-description" className="mt-2 text-sm leading-6 text-slate-600">
+                    Your account, personal content, sessions, and owned resources will be deleted.
+                    This cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Close delete account dialog"
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                onClick={() => setDeleteDialogOpen(false)}
+                disabled={deleteMutation.isPending}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {deleteMutation.error ? (
+              <div className="mt-4">
+                <ErrorState
+                  message={apiErrorMessage(
+                    deleteMutation.error,
+                    'Your account could not be deleted. No changes were made.',
+                  )}
+                />
+              </div>
+            ) : null}
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                id="delete-account-cancel"
+                type="button"
+                variant="secondary"
+                onClick={() => setDeleteDialogOpen(false)}
+                disabled={deleteMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="h-4 w-4" />
+                {deleteMutation.isPending ? 'Deleting account...' : 'Delete account'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

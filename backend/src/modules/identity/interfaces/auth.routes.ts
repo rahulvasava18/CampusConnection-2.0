@@ -1,5 +1,6 @@
 import { Router, type Request } from 'express';
 import type { AuthService } from '../application/auth.service';
+import type { AccountDeletionService } from '../application/account-deletion.service';
 import { validateRequest } from '../../../shared/validation/validate';
 import { requireAuth } from '../security/auth.middleware';
 import { requireCsrf } from '../security/csrf.middleware';
@@ -55,7 +56,10 @@ function sendSession(
   };
 }
 
-export function createAuthRouter(authService: AuthService): Router {
+export function createAuthRouter(
+  authService: AuthService,
+  accountDeletionService?: Pick<AccountDeletionService, 'deleteAccount'>,
+): Router {
   const router = Router();
 
   router.get('/csrf', (_req, res) => {
@@ -197,6 +201,18 @@ export function createAuthRouter(authService: AuthService): Router {
   router.post('/logout-all', requireAuth, requireCsrf, async (req, res, next) => {
     try {
       await authService.logoutAll(requireRequestAuth(req), requestMeta(req));
+      clearAuthCookies(res);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
+  router.delete('/account', requireAuth, requireCsrf, async (req, res, next) => {
+    try {
+      if (!accountDeletionService) {
+        throw new AppError('ACCOUNT_DELETION_UNAVAILABLE', 'Account deletion is unavailable.', 503);
+      }
+      await accountDeletionService.deleteAccount(requireRequestAuth(req), requestMeta(req));
       clearAuthCookies(res);
       res.status(204).send();
     } catch (error) {

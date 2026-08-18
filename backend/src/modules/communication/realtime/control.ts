@@ -5,18 +5,20 @@ import { getRedisClient } from '../../../infrastructure/redis/client';
 import { logger } from '../../../shared/logging/logger';
 
 const channel = 'campusconnection:realtime-control';
-export interface RealtimeControlEvent {
-  type:
-    | 'conversation-member-added'
-    | 'conversation-member-removed'
-    | 'conversation-member-left'
-    | 'message-updated'
-    | 'message-deleted';
-  conversationId: string;
-  userId?: string;
-  message?: MessageView;
-  messageId?: string;
-}
+export type RealtimeControlEvent =
+  | { type: 'user-account-deleted'; userId: string }
+  | {
+      type:
+        | 'conversation-member-added'
+        | 'conversation-member-removed'
+        | 'conversation-member-left'
+        | 'message-updated'
+        | 'message-deleted';
+      conversationId: string;
+      userId?: string;
+      message?: MessageView;
+      messageId?: string;
+    };
 
 export async function publishRealtimeControl(event: RealtimeControlEvent): Promise<void> {
   try {
@@ -37,7 +39,19 @@ export async function subscribeRealtimeControl(
     if (topic !== channel) return;
     try {
       const event = JSON.parse(raw) as RealtimeControlEvent;
-      if (!event.conversationId) return;
+      if (event.type === 'user-account-deleted' && event.userId) {
+        void io
+          .fetchSockets()
+          .then((sockets) =>
+            Promise.all(
+              sockets
+                .filter((socket) => socket.data.userId === event.userId)
+                .map((socket) => socket.disconnect(true)),
+            ),
+          );
+        return;
+      }
+      if (!('conversationId' in event) || !event.conversationId) return;
       if (event.type === 'message-updated' && event.message) {
         io.to(`conversation:${event.conversationId}`).emit('message:updated', event.message);
         return;

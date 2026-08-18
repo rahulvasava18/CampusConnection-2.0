@@ -223,3 +223,7 @@ export async function logout(): Promise<void> {
     useAuthStore.getState().clearSession();
   }
 }
+
+export function deleteAccount(): Promise<void> {
+  return apiRequest<void>('/auth/account', { method: 'DELETE' });
+}

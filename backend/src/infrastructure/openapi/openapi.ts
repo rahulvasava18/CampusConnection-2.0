@@ -164,6 +164,17 @@ export const openApiDocument = {
         responses: { '204': { description: 'Sessions revoked' } },
       },
     },
+    '/auth/account': {
+      delete: {
+        summary: 'Permanently delete the authenticated account and account-owned data',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '204': { description: 'Account deleted' },
+          '403': { description: 'CSRF validation failed' },
+          '409': { description: 'Shared resource ownership must be transferred first' },
+        },
+      },
+    },
     '/me': {
       get: {
         summary: 'Get the current user',

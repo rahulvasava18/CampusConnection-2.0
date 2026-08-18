@@ -574,7 +574,7 @@ export function PostCard({
           <div className="flex items-center gap-2">
             <MessageCircle className="h-4 w-4 text-slate-500" />
             <p className="type-ui text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-              Conversation
+              Comment Section
             </p>
           </div>
           {listedComments.isLoading ? (

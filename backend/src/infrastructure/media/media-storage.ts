@@ -94,9 +94,15 @@ export class CloudinaryMediaStorage implements MediaStorage {
       api_key: configuration.apiKey,
       signature: signature(parameters, configuration.apiSecret),
     });
-    await fetch(`https://api.cloudinary.com/v1_1/${configuration.cloudName}/image/destroy`, {
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${configuration.cloudName}/image/destroy`,
+      {
       method: 'POST',
       body: form,
-    });
+      },
+    );
+    if (!response.ok) {
+      throw new AppError('MEDIA_DELETE_FAILED', 'Image cleanup failed.', 502);
+    }
   }
 }

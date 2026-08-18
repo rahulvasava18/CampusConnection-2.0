@@ -12,6 +12,7 @@ import { requestContextMiddleware } from './shared/http/request-context';
 import { logger } from './shared/logging/logger';
 import { createHealthRouter } from './interfaces/http/health.routes';
 import { AuthService } from './modules/identity/application/auth.service';
+import { AccountDeletionService } from './modules/identity/application/account-deletion.service';
 import { createAuthRouter, createMeRouter } from './modules/identity/interfaces/auth.routes';
 import { createSocialRouter } from './modules/social/interfaces/social.routes';
 import { createCollaborationRouter } from './modules/collaboration/interfaces/collaboration.routes';
@@ -25,6 +26,7 @@ import { createProfileRouter } from './modules/profile/interfaces/profile.routes
 export interface AppDependencies {
   healthService?: HealthService;
   authService?: AuthService;
+  accountDeletionService?: Pick<AccountDeletionService, 'deleteAccount'>;
 }
 
 export function createApp(dependencies: AppDependencies = {}): Express {
@@ -32,6 +34,7 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   const healthService =
     dependencies.healthService ?? new HealthService(isMongoReady, isRedisReady, 'api');
   const authService = dependencies.authService ?? new AuthService();
+  const accountDeletionService = dependencies.accountDeletionService ?? new AccountDeletionService();
   const app = express();
 
   app.disable('x-powered-by');
@@ -79,7 +82,7 @@ export function createApp(dependencies: AppDependencies = {}): Express {
 
   const apiRouter = express.Router();
   apiRouter.use(createHealthRouter(healthService));
-  apiRouter.use('/auth', createAuthRouter(authService));
+  apiRouter.use('/auth', createAuthRouter(authService, accountDeletionService));
   apiRouter.use(createMeRouter(authService));
   apiRouter.use(createOpenApiRouter());
   apiRouter.use(createDiscoveryRouter());
