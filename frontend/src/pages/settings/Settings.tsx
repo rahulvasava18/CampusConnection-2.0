@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Bell,
@@ -627,18 +628,19 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
         </div>
       </div>
 
-      {deleteDialogOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"
-          role="presentation"
-        >
-          <div
-            className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-6 shadow-2xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-account-title"
-            aria-describedby="delete-account-description"
-          >
+      {deleteDialogOpen
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[1000] flex min-h-screen items-center justify-center bg-slate-950/45 p-4"
+              role="presentation"
+            >
+              <div
+                className="relative w-full max-w-md rounded-2xl border border-red-200 bg-white p-6 shadow-2xl"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="delete-account-title"
+                aria-describedby="delete-account-description"
+              >
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">
                 <span className="rounded-xl bg-red-100 p-2.5 text-red-700">
@@ -648,7 +650,10 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
                   <h2 id="delete-account-title" className="text-lg font-bold text-red-900">
                     Delete account permanently?
                   </h2>
-                  <p id="delete-account-description" className="mt-2 text-sm leading-6 text-slate-600">
+                  <p
+                    id="delete-account-description"
+                    className="mt-2 text-sm leading-6 text-slate-600"
+                  >
                     Your account, personal content, sessions, and owned resources will be deleted.
                     This cannot be undone.
                   </p>
@@ -694,9 +699,11 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
                 {deleteMutation.isPending ? 'Deleting account...' : 'Delete account'}
               </Button>
             </div>
-          </div>
-        </div>
-      ) : null}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </section>
   );
 }
