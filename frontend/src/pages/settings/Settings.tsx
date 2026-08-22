@@ -67,6 +67,8 @@ const defaultPreferences: UserPreferences = {
   },
 };
 
+const passwordRecoveryTimeoutMs = 120_000;
+
 const settingsNav: Array<{ id: string; label: string; icon: typeof Bell }> = [
   { id: 'account', label: 'Account', icon: Users },
   { id: 'privacy', label: 'Privacy & Discovery', icon: Eye },
@@ -134,8 +136,7 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
   const [recoveryStatus, setRecoveryStatus] = useState<'idle' | 'starting' | 'waiting' | 'verified'>('idle');
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const recoveryPopup = useRef<Window | null>(null);
-  const recoveryCloseTimer = useRef<number | null>(null);
-  const recoveryMessageReceived = useRef(false);
+  const recoveryTimeout = useRef<number | null>(null);
 
   const settings = useQuery({ queryKey: ['settings'], queryFn: getSettings });
   const sessions = useQuery({
@@ -201,10 +202,9 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
 
   const beginPasswordRecovery = () => {
     setRecoveryError(null);
-    recoveryMessageReceived.current = false;
-    if (recoveryCloseTimer.current !== null) {
-      window.clearTimeout(recoveryCloseTimer.current);
-      recoveryCloseTimer.current = null;
+    if (recoveryTimeout.current !== null) {
+      window.clearTimeout(recoveryTimeout.current);
+      recoveryTimeout.current = null;
     }
     const popup = window.open(
       'about:blank',
@@ -219,16 +219,11 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
     setRecoveryStatus('starting');
     void startGooglePasswordRecovery()
       .then(({ authorizationUrl }) => {
-        if (popup.closed) {
-          setRecoveryStatus('idle');
-          setRecoveryError('Google verification was cancelled.');
-          return;
-        }
         popup.location.assign(authorizationUrl);
         setRecoveryStatus('waiting');
       })
       .catch((error) => {
-        popup.close();
+        recoveryPopup.current = null;
         setRecoveryStatus('idle');
         setRecoveryError(apiErrorMessage(error, 'Unable to start Google verification.'));
       });
@@ -240,14 +235,11 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== expectedOrigin || event.source !== recoveryPopup.current) return;
       if (event.data?.type !== 'campusconnection-password-recovery') return;
-      recoveryMessageReceived.current = true;
-      if (recoveryCloseTimer.current !== null) {
-        window.clearTimeout(recoveryCloseTimer.current);
-        recoveryCloseTimer.current = null;
+      if (recoveryTimeout.current !== null) {
+        window.clearTimeout(recoveryTimeout.current);
+        recoveryTimeout.current = null;
       }
-      const popup = recoveryPopup.current;
       recoveryPopup.current = null;
-      popup?.close();
       if (event.data.status === 'verified') {
         setRecoveryStatus('verified');
         setRecoveryError(null);
@@ -261,23 +253,17 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
         );
       }
     };
-    const timer = window.setInterval(() => {
-      if (recoveryPopup.current?.closed && recoveryCloseTimer.current === null) {
-        recoveryCloseTimer.current = window.setTimeout(() => {
-          recoveryCloseTimer.current = null;
-          if (recoveryMessageReceived.current) return;
-          recoveryPopup.current = null;
-          setRecoveryStatus('idle');
-          setRecoveryError('Google verification was cancelled.');
-        }, 1500);
-      }
-    }, 500);
+    recoveryTimeout.current = window.setTimeout(() => {
+      recoveryTimeout.current = null;
+      recoveryPopup.current = null;
+      setRecoveryStatus('idle');
+      setRecoveryError('Recovery verification timed out. Please try again.');
+    }, passwordRecoveryTimeoutMs);
     window.addEventListener('message', onMessage);
     return () => {
-      window.clearInterval(timer);
-      if (recoveryCloseTimer.current !== null) {
-        window.clearTimeout(recoveryCloseTimer.current);
-        recoveryCloseTimer.current = null;
+      if (recoveryTimeout.current !== null) {
+        window.clearTimeout(recoveryTimeout.current);
+        recoveryTimeout.current = null;
       }
       window.removeEventListener('message', onMessage);
     };
