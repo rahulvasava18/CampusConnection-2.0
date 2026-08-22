@@ -71,7 +71,7 @@ export function Communities({ onNavigate }: { onNavigate: (path: string) => void
     <div className="page-theme page-theme-communities space-y-7">
       <CompactPageTop
         control={
-          <Card className="space-y-4 p-4 sm:p-5">
+          <Card className="min-h-[17rem] space-y-4 p-4 sm:p-5">
             <label className="flex items-center gap-3 rounded-xl border border-line bg-slate-50 px-4 py-3">
               <Search className="h-5 w-5 text-brand-500" />
               <span className="sr-only">Search communities</span>
@@ -111,7 +111,7 @@ export function Communities({ onNavigate }: { onNavigate: (path: string) => void
           />
         }
       />
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
         <div className="space-y-5">
           <div className="flex items-center justify-between">
             <h2 className="type-display text-xl font-bold text-ink">Discover communities</h2>
@@ -137,7 +137,7 @@ export function Communities({ onNavigate }: { onNavigate: (path: string) => void
               }
             />
           ) : null}
-          <div className="grid gap-4 md:grid-cols-1">
+          <div className="grid gap-4 md:grid-cols-2">
             {items.map((community) => (
               <CommunityCard
                 key={community.id}

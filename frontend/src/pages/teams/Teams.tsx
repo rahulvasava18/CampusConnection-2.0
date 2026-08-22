@@ -45,7 +45,7 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
     <div className="page-theme page-theme-teams space-y-6">
       <CompactPageTop
         control={
-          <Card className="space-y-4 p-4 sm:p-5">
+          <Card className="min-h-[17rem] space-y-4 p-4 sm:p-5">
         <label className="flex items-center gap-3 rounded-xl border border-line bg-slate-50 px-4 py-3">
           <Search className="h-5 w-5 text-brand-500" aria-hidden="true" />
           <span className="sr-only">Search teams</span>
@@ -156,7 +156,12 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
         />
       ) : null}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-5">
+          <div className="flex items-end justify-between gap-3">
+            <h1 className="type-display text-xl font-bold text-ink">Discover teams</h1>
+            <span className="text-sm font-semibold text-muted">{items.length} shown</span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
         {items.map((team) => (
           <Card
             key={team.id}
@@ -221,6 +226,7 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
             </div>
           </Card>
         ))}
+          </div>
         </div>
         <aside className="space-y-5">
           <Card className="p-5">

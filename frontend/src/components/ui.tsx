@@ -228,7 +228,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-brand-200 bg-brand-50 px-6 py-12 text-center shadow-[0_12px_30px_rgba(43,87,145,.1)]">
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-brand-200 bg-brand-50 px-6 py-8 text-center shadow-[0_12px_30px_rgba(43,87,145,.1)]">
       <span className="mb-3 rounded-2xl bg-white p-3 text-[#00887a] shadow-sm">
         <Sparkles className="h-5 w-5" />
       </span>
