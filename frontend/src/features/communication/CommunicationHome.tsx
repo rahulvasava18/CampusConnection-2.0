@@ -133,6 +133,7 @@ export function CommunicationHome({
 } = {}) {
   const token = useAuthStore((state) => state.accessToken);
   const user = useAuthStore((state) => state.user);
+  const standaloneMessagesPage = !communityId && !teamId;
   const queryClient = useQueryClient();
   const connection = useCommunicationStore((state) => state.connection);
   const pending = useCommunicationStore((state) => state.pending);
@@ -437,7 +438,14 @@ export function CommunicationHome({
   const people = peopleSearch.data?.data ?? [];
 
   return (
-    <section className="page-theme page-theme-messages flex min-h-[calc(100vh-8.5rem)] flex-col gap-5">
+    <section
+      className={cn(
+        'page-theme page-theme-messages flex min-w-0 flex-col',
+        standaloneMessagesPage
+          ? 'h-[calc(100vh-10rem)] min-h-[34rem] gap-4 lg:min-h-0'
+          : 'min-h-[calc(100vh-8.5rem)] gap-5',
+      )}
+    >
       {communityId && !scopedConversationItems.length ? (
         <Card className="p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
@@ -464,30 +472,50 @@ export function CommunicationHome({
           </div>
         </Card>
       ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">Inbox</p>
-          <p className="mt-1 text-sm text-muted">Direct, team, and community conversations in one place.</p>
+      {!standaloneMessagesPage ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">Inbox</p>
+            <p className="mt-1 text-sm text-muted">Direct, team, and community conversations in one place.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge tone={connection === 'connected' ? 'success' : 'warning'}>
+              {connection === 'connected' ? <Wifi className="mr-1 inline h-3 w-3" /> : <WifiOff className="mr-1 inline h-3 w-3" />}
+              {connection === 'connecting' ? 'reconnecting' : connection}
+            </Badge>
+            {realtimeError && realtimeAllowed ? (
+              <Button size="sm" variant="secondary" onClick={() => socketRef.current?.connect()}>Reconnect</Button>
+            ) : null}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge tone={connection === 'connected' ? 'success' : 'warning'}>
-            {connection === 'connected' ? <Wifi className="mr-1 inline h-3 w-3" /> : <WifiOff className="mr-1 inline h-3 w-3" />}
-            {connection === 'connecting' ? 'reconnecting' : connection}
-          </Badge>
-          {realtimeError && realtimeAllowed ? (
-            <Button size="sm" variant="secondary" onClick={() => socketRef.current?.connect()}>Reconnect</Button>
-          ) : null}
-        </div>
-      </div>
-      {realtimeError && realtimeAllowed ? <ErrorState message={`Realtime connection unavailable: ${realtimeError}`} /> : null}
-      <div className="grid min-h-[32rem] flex-1 gap-4 lg:h-[calc(100vh-15rem)] lg:max-h-[44rem] lg:grid-cols-[21rem_1fr]">
-        <Card className={cn('flex min-h-0 flex-col overflow-hidden p-3', selectedId && 'hidden lg:flex')}>
-          <div className="flex items-center justify-between px-2 pb-3">
+      ) : null}
+      {realtimeError && realtimeAllowed && !standaloneMessagesPage ? <ErrorState message={`Realtime connection unavailable: ${realtimeError}`} /> : null}
+      <div
+        className={cn(
+          'grid min-w-0 min-h-[32rem] flex-1 gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]',
+          standaloneMessagesPage ? 'min-h-0 lg:h-full lg:max-h-none' : 'lg:h-[calc(100vh-15rem)] lg:max-h-[44rem]',
+        )}
+      >
+        <Card className={cn('flex min-h-0 min-w-0 flex-col overflow-hidden p-3', selectedId && 'hidden lg:flex')}>
+          <div className="flex items-start justify-between gap-3 border-b border-line px-2 pb-3">
             <div>
               <h3 className="font-display font-bold text-ink">Conversations</h3>
-              <p className="mt-1 text-xs text-muted">{conversationItems.length} shown</p>
+              <p className="mt-1 text-xs text-muted">{scopedConversationItems.length} conversations</p>
             </div>
-            <Badge tone="neutral">{scopedConversationItems.filter((item) => item.unreadCount).length} unread</Badge>
+            <div className="flex flex-col items-end gap-2">
+              <Badge tone="neutral">{scopedConversationItems.filter((item) => item.unreadCount).length} unread</Badge>
+              {standaloneMessagesPage ? (
+                <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                  {connection === 'connected' ? <Wifi className="h-3 w-3 text-emerald-600" /> : <WifiOff className="h-3 w-3" />}
+                  {connection === 'connecting' ? 'Reconnecting' : connection}
+                  {realtimeError && realtimeAllowed ? (
+                    <button type="button" className="ml-1 text-brand-700 underline" onClick={() => socketRef.current?.connect()}>
+                      Retry
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
           {!communityId && !teamId ? (
             <div className="mb-3 rounded-xl border border-line bg-[var(--surface-secondary)] p-3">
@@ -530,7 +558,7 @@ export function CommunicationHome({
               className="w-full rounded-xl border border-line bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-500/10"
             />
           </label>
-          <div className="mb-3 flex gap-1 overflow-x-auto px-1 pb-1" aria-label="Conversation filters">
+          <div className="mb-3 flex flex-wrap gap-1 px-1" aria-label="Conversation filters">
             {conversationFilters.map((filter) => (
               <button
                 type="button"
@@ -557,7 +585,12 @@ export function CommunicationHome({
               description={scopedConversationItems.length ? 'Try a different search or filter.' : 'Search for a student above to start a conversation.'}
             />
           ) : null}
-          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+          {standaloneMessagesPage && realtimeError && realtimeAllowed ? (
+            <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
+              Realtime connection unavailable: {realtimeError}
+            </p>
+          ) : null}
+          <div className="min-h-0 flex-1 space-y-1 overflow-x-hidden overflow-y-auto pr-1">
             {conversationItems.map((item) => {
               const isSelected = item.id === selectedId;
               const peerPresence = item.peer ? presence[item.peer.userId]?.state : undefined;
@@ -565,8 +598,10 @@ export function CommunicationHome({
                 <button
                   type="button"
                   className={cn(
-                    'flex items-center gap-3 rounded-xl px-3 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-brand-500',
-                    isSelected ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20' : 'hover:bg-brand-50',
+                    'flex w-full min-w-0 items-center gap-3 rounded-xl border px-3 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-brand-500',
+                    isSelected
+                      ? 'border-brand-200 bg-brand-50 shadow-sm'
+                      : 'border-transparent hover:border-brand-100 hover:bg-brand-50',
                   )}
                   onClick={() => setSelectedId(item.id)}
                   key={item.id}
@@ -575,17 +610,17 @@ export function CommunicationHome({
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       <strong className="block truncate text-sm">{conversationLabel(item)}</strong>
-                      <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide', isSelected ? 'bg-white/15 text-brand-100' : 'bg-slate-100 text-slate-500')}>
+                      <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
                         {conversationTypeLabel(item.type)}
                       </span>
                     </span>
-                    <small className={cn('mt-1 block truncate text-xs', isSelected ? 'text-brand-100' : 'text-muted')}>
+                    <small className="mt-1 block truncate text-xs text-muted">
                       {item.lastMessagePreview ?? conversationUsername(item)}
                       {peerPresence === 'online' ? ' · online' : ''}
                     </small>
                   </span>
                   <span className="flex shrink-0 flex-col items-end gap-1">
-                    <small className={cn('text-[10px]', isSelected ? 'text-brand-100' : 'text-muted')}>
+                    <small className="text-[10px] text-muted">
                       {formatConversationDate(item.lastMessageAt)}
                     </small>
                     {item.unreadCount ? <span className="rounded-full bg-brand-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{item.unreadCount}</span> : null}
@@ -595,10 +630,10 @@ export function CommunicationHome({
             })}
           </div>
         </Card>
-        <Card className={cn('flex min-h-0 flex-col overflow-hidden', !selectedId && 'hidden lg:flex')}>
+        <Card className={cn('flex min-h-0 min-w-0 flex-col overflow-hidden', !selectedId && 'hidden lg:flex')}>
           {selected ? (
             <>
-              <div className="flex flex-wrap items-center gap-3 border-b border-line bg-white px-4 py-4 sm:px-5">
+              <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-line bg-white px-4 py-4 sm:px-5">
                 <Button size="sm" variant="ghost" className="lg:hidden" onClick={() => setSelectedId(undefined)}>
                   <ArrowLeft className="h-4 w-4" />
                   Inbox
@@ -630,7 +665,7 @@ export function CommunicationHome({
               </div>
               <div
                 ref={messageListRef}
-                className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 sm:p-5"
+                className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-slate-50/70 p-4 sm:p-5"
                 onScroll={(event) => {
                   if (event.currentTarget.scrollTop < 40) loadOlder();
                 }}
@@ -654,7 +689,7 @@ export function CommunicationHome({
                         <article
                           className={cn(
                             'group relative w-fit max-w-[min(85%,34rem)] rounded-[1.25rem] px-4 py-3 text-sm shadow-sm',
-                            mine ? 'ml-auto rounded-br-md bg-brand-600 text-white' : 'rounded-bl-md bg-white text-slate-700',
+                            mine ? 'ml-auto rounded-br-md bg-brand-600 text-white' : 'rounded-bl-md border border-line bg-white text-slate-700',
                             isPending && 'opacity-60',
                             deleted && 'italic text-slate-400',
                           )}
