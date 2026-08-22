@@ -22,15 +22,12 @@ import type {
   MessageSendPayload,
   MessageView,
   PresenceUpdate,
-  SearchResult,
   TypingUpdate,
 } from '@campusconnection/shared';
 import { frontendEnv } from '../../lib/env';
 import { useAuthStore } from '../auth/auth.store';
-import { search } from '../discovery/discovery.api';
 import {
   createCommunityConversation,
-  createDirectConversation,
   createTeamConversation,
   deleteMessage,
   editMessage,
@@ -46,7 +43,6 @@ import {
   Card,
   EmptyState,
   ErrorState,
-  Field,
   LoadingState,
   RestrictedState,
   cn,
@@ -65,11 +61,6 @@ function conversationLabel(item: ConversationView) {
 
 function conversationUsername(item: ConversationView) {
   return item.type === 'DIRECT' && item.peer?.username ? `@${item.peer.username}` : item.type;
-}
-
-function resultUsername(result: SearchResult) {
-  const username = result.metadata.username;
-  return typeof username === 'string' ? `@${username}` : undefined;
 }
 
 type ConversationFilter = 'ALL' | 'DIRECT' | 'GROUP' | 'TEAM' | 'COMMUNITY';
@@ -149,7 +140,6 @@ export function CommunicationHome({
   const [messageCursor, setMessageCursor] = useState<string>();
   const [messages, setMessages] = useState<MessageView[]>([]);
   const [draft, setDraft] = useState('');
-  const [peopleQuery, setPeopleQuery] = useState('');
   const [conversationQuery, setConversationQuery] = useState('');
   const [conversationFilter, setConversationFilter] = useState<ConversationFilter>('ALL');
   const [realtimeError, setRealtimeError] = useState<string | null>(null);
@@ -167,35 +157,12 @@ export function CommunicationHome({
     queryKey: ['conversations'],
     queryFn: () => getConversations(),
   });
-  const peopleSearch = useQuery({
-    queryKey: ['communication-people', peopleQuery.trim()],
-    queryFn: () => search(peopleQuery.trim(), 'people'),
-    enabled: !communityId && !teamId && peopleQuery.trim().length >= 2,
-  });
   const messagesQuery = useQuery({
     queryKey: ['communication-messages', selectedId, messageCursor],
     queryFn: () => getMessages(selectedId!, messageCursor),
     enabled: Boolean(selectedId),
   });
 
-  const directConversation = useMutation({
-    mutationFn: (targetUserId: string) => createDirectConversation(targetUserId),
-    onSuccess: (conversation) => {
-      setPeopleQuery('');
-      setSelectedId(conversation.id);
-      queryClient.setQueryData(
-        ['conversations'],
-        (current: { data: ConversationView[] } | undefined) =>
-          current
-            ? {
-                ...current,
-                data: [conversation, ...current.data.filter((item) => item.id !== conversation.id)],
-              }
-            : current,
-      );
-      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-    },
-  });
   const communityConversation = useMutation({
     mutationFn: () => createCommunityConversation(communityId!),
     onSuccess: (conversation) => {
@@ -435,8 +402,6 @@ export function CommunicationHome({
   const displayMessages: Array<MessageView | PendingMessage> = [...messages]
     .reverse()
     .concat(pendingForSelected);
-  const people = peopleSearch.data?.data ?? [];
-
   return (
     <section
       className={cn(
@@ -517,36 +482,6 @@ export function CommunicationHome({
               ) : null}
             </div>
           </div>
-          {!communityId && !teamId ? (
-            <div className="mb-3 rounded-xl border border-line bg-[var(--surface-secondary)] p-3">
-              <Field
-                label="New message"
-                aria-label="Search people"
-                value={peopleQuery}
-                onChange={(event) => setPeopleQuery(event.target.value)}
-                placeholder="Search by name or username"
-              />
-              {peopleSearch.isFetching ? <LoadingState label="Searching people" /> : null}
-              {peopleSearch.error ? <p className="mt-2 text-xs text-red-600">{apiErrorMessage(peopleSearch.error, 'People search is unavailable.')}</p> : null}
-              {directConversation.error ? <p className="mt-2 text-xs text-red-600">{apiErrorMessage(directConversation.error, 'Unable to start conversation.')}</p> : null}
-              {peopleQuery.trim().length >= 2 && !peopleSearch.isFetching && !peopleSearch.error && !people.length ? <p className="mt-2 text-xs text-muted">No matching people found.</p> : null}
-              <div className="mt-2 grid gap-2">
-                {people.map((result) => (
-                  <div className="flex items-center gap-2 rounded-lg border border-line bg-[var(--surface-elevated)] px-2 py-2" key={`${result.type}-${result.id}`}>
-                    <Avatar name={result.title} src={result.imageUrl} size="sm" />
-                    <div className="min-w-0 flex-1">
-                      <strong className="block truncate text-xs text-ink">{result.title}</strong>
-                      <span className="block truncate text-[11px] text-muted">{resultUsername(result) ?? 'Campus member'}</span>
-                    </div>
-                    <Button size="sm" onClick={() => directConversation.mutate(result.id)} disabled={!realtimeAllowed || directConversation.isPending}>
-                      <MessageCircle className="h-3.5 w-3.5" />
-                      Message
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
           <label className="relative mb-3 block px-1">
             <span className="sr-only">Search conversations</span>
             <Search className="pointer-events-none absolute left-4 top-3 h-4 w-4 text-slate-400" />
