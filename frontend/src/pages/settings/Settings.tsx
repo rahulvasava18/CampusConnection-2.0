@@ -134,6 +134,8 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
   const [recoveryStatus, setRecoveryStatus] = useState<'idle' | 'starting' | 'waiting' | 'verified'>('idle');
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const recoveryPopup = useRef<Window | null>(null);
+  const recoveryCloseTimer = useRef<number | null>(null);
+  const recoveryMessageReceived = useRef(false);
 
   const settings = useQuery({ queryKey: ['settings'], queryFn: getSettings });
   const sessions = useQuery({
@@ -199,6 +201,11 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
 
   const beginPasswordRecovery = () => {
     setRecoveryError(null);
+    recoveryMessageReceived.current = false;
+    if (recoveryCloseTimer.current !== null) {
+      window.clearTimeout(recoveryCloseTimer.current);
+      recoveryCloseTimer.current = null;
+    }
     const popup = window.open(
       'about:blank',
       'campusconnection-password-recovery',
@@ -233,7 +240,14 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== expectedOrigin || event.source !== recoveryPopup.current) return;
       if (event.data?.type !== 'campusconnection-password-recovery') return;
-      recoveryPopup.current?.close();
+      recoveryMessageReceived.current = true;
+      if (recoveryCloseTimer.current !== null) {
+        window.clearTimeout(recoveryCloseTimer.current);
+        recoveryCloseTimer.current = null;
+      }
+      const popup = recoveryPopup.current;
+      recoveryPopup.current = null;
+      popup?.close();
       if (event.data.status === 'verified') {
         setRecoveryStatus('verified');
         setRecoveryError(null);
@@ -248,15 +262,23 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
       }
     };
     const timer = window.setInterval(() => {
-      if (recoveryPopup.current?.closed) {
-        recoveryPopup.current = null;
-        setRecoveryStatus('idle');
-        setRecoveryError('Google verification was cancelled.');
+      if (recoveryPopup.current?.closed && recoveryCloseTimer.current === null) {
+        recoveryCloseTimer.current = window.setTimeout(() => {
+          recoveryCloseTimer.current = null;
+          if (recoveryMessageReceived.current) return;
+          recoveryPopup.current = null;
+          setRecoveryStatus('idle');
+          setRecoveryError('Google verification was cancelled.');
+        }, 1500);
       }
     }, 500);
     window.addEventListener('message', onMessage);
     return () => {
       window.clearInterval(timer);
+      if (recoveryCloseTimer.current !== null) {
+        window.clearTimeout(recoveryCloseTimer.current);
+        recoveryCloseTimer.current = null;
+      }
       window.removeEventListener('message', onMessage);
     };
   }, [recoveryStatus]);
