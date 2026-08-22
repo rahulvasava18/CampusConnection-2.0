@@ -1,4 +1,4 @@
-import { Search, Users } from 'lucide-react';
+import { ChevronRight, Search, Users } from 'lucide-react';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState } from '../../components/ui';
@@ -38,6 +38,7 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
     },
   });
   const items = collectionItems(teams.data);
+  const userTeams = items.filter((team) => team.isMember || team.membershipRole === 'OWNER');
   const pendingInvitations = collectionItems(invitations.data);
 
   return (
@@ -154,7 +155,8 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
           action={<Button onClick={() => onNavigate('/teams/create')}>Create team</Button>}
         />
       ) : null}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="grid gap-4 md:grid-cols-2">
         {items.map((team) => (
           <Card
             key={team.id}
@@ -219,6 +221,39 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
             </div>
           </Card>
         ))}
+        </div>
+        <aside className="space-y-5">
+          <Card className="p-5">
+            <h2 className="type-display text-lg font-bold text-ink">My Teams</h2>
+            {userTeams.length ? (
+              <div className="mt-4 space-y-2">
+                {userTeams.map((team) => (
+                  <button
+                    key={team.id}
+                    type="button"
+                    onClick={() => onNavigate(`/teams/${team.id}`)}
+                    className="flex w-full items-center gap-3 rounded-xl border border-transparent bg-slate-50 p-3 text-left transition hover:border-brand-200 hover:bg-brand-50"
+                  >
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
+                      <Users className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold text-ink">{team.name}</span>
+                      <span className="mt-1 block text-xs text-muted">
+                        {team.memberCount ?? 0} members
+                      </span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm leading-6 text-muted">
+                No teams yet. Join or create your first team.
+              </p>
+            )}
+          </Card>
+        </aside>
       </div>
     </div>
   );
