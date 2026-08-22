@@ -11,8 +11,7 @@ import {
 } from '../../features/club/club.api';
 import { apiErrorMessage, collectionItems } from '../../lib/api-state';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState } from '../../components/ui';
-import { CompactPageTop } from '../../components/PageHeader';
-import { WorkspaceCreateCard } from '../../components/WorkspaceCreateCard';
+import { CompactPageHeader, CompactPageTop } from '../../components/PageHeader';
 
 function ClubCard({
   club,
@@ -218,7 +217,12 @@ export function Clubs({ onNavigate }: { onNavigate: (target: string) => void }) 
           </Card>
         }
         header={
-          <WorkspaceCreateCard kind="clubs" onAction={() => onNavigate('/clubs/create')} />
+          <CompactPageHeader
+            eyebrow="Workspace / Clubs"
+            title="Organize what your campus cares about."
+            description="Discover verified student organizations, join a club, and find the events that bring campus life together."
+            action={<Button onClick={() => onNavigate('/clubs/create')}>Create a club</Button>}
+          />
         }
       />
       {invites.length ? (

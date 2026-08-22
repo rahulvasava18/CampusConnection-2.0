@@ -2,8 +2,7 @@ import { ChevronRight, Search, Users } from 'lucide-react';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState } from '../../components/ui';
-import { CompactPageTop } from '../../components/PageHeader';
-import { WorkspaceCreateCard } from '../../components/WorkspaceCreateCard';
+import { CompactPageHeader, CompactPageTop } from '../../components/PageHeader';
 import { collectionItems, apiErrorMessage, isRestrictedApiError } from '../../lib/api-state';
 import {
   getTeamInvitations,
@@ -96,7 +95,12 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
           </Card>
         }
         header={
-          <WorkspaceCreateCard kind="teams" onAction={() => onNavigate('/teams/create')} />
+          <CompactPageHeader
+            eyebrow="Workspace / Teams"
+            title="Find team and roles."
+            description="Browse goal-oriented campus teams and join an active effort."
+            action={<Button onClick={() => onNavigate('/teams/create')}>Create team</Button>}
+          />
         }
       />
       {pendingInvitations.length ? (

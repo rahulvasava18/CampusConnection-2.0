@@ -5,8 +5,7 @@ import type { EventView } from '@campusconnection/shared';
 import { getEvents } from '../../features/collaboration/collaboration.api';
 import { apiErrorMessage, collectionItems, isRestrictedApiError } from '../../lib/api-state';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState } from '../../components/ui';
-import { CompactPageTop } from '../../components/PageHeader';
-import { WorkspaceCreateCard } from '../../components/WorkspaceCreateCard';
+import { CompactPageHeader, CompactPageTop } from '../../components/PageHeader';
 
 function EventCard({ event, onOpen, onNavigate }: { event: EventView; onOpen: () => void; onNavigate: (target: string) => void }) {
   return (
@@ -189,7 +188,12 @@ export function Events({ onNavigate }: { onNavigate: (target: string) => void })
           </Card>
         }
         header={
-          <WorkspaceCreateCard kind="events" onAction={() => onNavigate('/events')} />
+          <CompactPageHeader
+            eyebrow="Workspace / Events"
+            title="Make time for campus life."
+            description="Discover hackathons, workshops, talks, competitions, and meetups."
+            action={<span className="text-sm font-semibold text-muted">Discover verified club events</span>}
+          />
         }
       />
       {events.isLoading ? <LoadingState label="Finding events" /> : null}

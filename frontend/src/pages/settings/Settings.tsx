@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
+  ArrowRight,
   Bell,
   BriefcaseBusiness,
   CalendarDays,
@@ -574,39 +575,40 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
                   passwordMutation.mutate();
                 }}
               >
-                {settings.data.passwordConfigured && recoveryStatus !== 'verified' ? (
-                  <Field
-                    label="Current password"
-                    type="password"
-                    value={currentPassword}
-                    onChange={(event) => setCurrentPassword(event.target.value)}
-                    autoComplete="current-password"
-                    required
-                  />
-                ) : null}
                 {settings.data.passwordConfigured ? (
-                  <div className="rounded-xl border border-brand-100 bg-brand-50/60 p-3 sm:col-span-2">
-                    <p className="text-xs font-semibold text-brand-900">Forgot your current password?</p>
-                    <p className="mt-1 text-xs leading-5 text-brand-800/80">
-                      Verify your identity with Google to reset your password securely.
-                    </p>
-                    {recoveryStatus === 'verified' ? (
-                      <p className="mt-2 text-xs font-bold text-emerald-700" role="status">
+                  <div className="sm:col-span-2">
+                    {recoveryStatus !== 'verified' ? (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-5">
+                        <div className="min-w-0 flex-1">
+                          <Field
+                            label="Current password"
+                            type="password"
+                            value={currentPassword}
+                            onChange={(event) => setCurrentPassword(event.target.value)}
+                            autoComplete="current-password"
+                            required
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          className="group mb-2 inline-flex shrink-0 items-center gap-1 self-end text-sm font-semibold text-brand-700 transition hover:text-brand-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={beginPasswordRecovery}
+                          disabled={recoveryStatus === 'starting' || recoveryStatus === 'waiting'}
+                        >
+                          {recoveryStatus === 'starting' || recoveryStatus === 'waiting' ? (
+                            'Waiting for Google…'
+                          ) : (
+                            <>
+                              Forgot password?
+                              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs font-bold text-emerald-700" role="status">
                         Identity verified. You can now set a new password.
                       </p>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="mt-3"
-                        onClick={beginPasswordRecovery}
-                        disabled={recoveryStatus === 'starting' || recoveryStatus === 'waiting'}
-                      >
-                        {recoveryStatus === 'starting' || recoveryStatus === 'waiting'
-                          ? 'Waiting for Google…'
-                          : 'Continue with Google'}
-                      </Button>
                     )}
                     {recoveryError ? (
                       <p className="mt-2 text-xs font-semibold text-red-600" role="alert">
