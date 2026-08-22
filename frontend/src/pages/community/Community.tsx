@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search } from 'lucide-react';
+import { ChevronRight, Network, Search } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CommunityCard } from './components/CommunityCard';
 import { Button, Card, EmptyState, ErrorState, Field, LoadingState } from '../../components/ui';
@@ -137,7 +137,7 @@ export function Communities({ onNavigate }: { onNavigate: (path: string) => void
               }
             />
           ) : null}
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-1">
             {items.map((community) => (
               <CommunityCard
                 key={community.id}
@@ -185,7 +185,7 @@ export function Communities({ onNavigate }: { onNavigate: (path: string) => void
               </div>
             </Card>
           ) : null}
-          <Card className="p-5 ">
+          <Card className="p-5">
             <h2 className="type-display text-lg font-bold text-ink">My communities</h2>
             {mine.isLoading ? <LoadingState label="Loading your spaces" /> : null}
             {!mine.isLoading && myItems.length === 0 ? (
@@ -199,12 +199,18 @@ export function Communities({ onNavigate }: { onNavigate: (path: string) => void
                   key={community.id}
                   type="button"
                   onClick={() => onNavigate(`/communities/${community.id}`)}
-                  className="rounded-xl bg-slate-50 px-3 py-3 text-left text-sm font-semibold text-ink hover:bg-brand-50"
+                  className="flex w-full items-center gap-3 rounded-xl border border-transparent bg-slate-50 px-3 py-3 text-left transition hover:border-brand-200 hover:bg-brand-50"
                 >
-                  {community.name}
-                  <span className="mt-1 block text-xs font-normal text-muted">
-                    {community.memberCount ?? 0} members
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
+                    <Network className="h-4 w-4" aria-hidden="true" />
                   </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold text-ink">{community.name}</span>
+                    <span className="mt-1 block text-xs font-normal text-muted">
+                      {community.memberCount ?? 0} members
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
                 </button>
               ))}
             </div>

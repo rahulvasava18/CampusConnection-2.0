@@ -1,4 +1,4 @@
-import { Search, FolderKanban } from 'lucide-react';
+import { ChevronRight, Search, FolderKanban } from 'lucide-react';
 import { useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ProjectView } from '@campusconnection/shared';
@@ -21,12 +21,12 @@ function ProjectCard({
   const progress = project.progressPercent ?? 0;
   return (
     <Card
-      className="theme-project-card cursor-pointer p-5 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"
+      className="theme-project-card group flex h-full cursor-pointer flex-col p-5 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md sm:p-6"
       onClick={onOpen}
     >
       <div className="flex items-start justify-between gap-3">
-        <span className="rounded-xl bg-brand-50 p-2.5 text-brand-600">
-          <FolderKanban className="h-5 w-5" />
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-600">
+          <FolderKanban className="h-6 w-6" aria-hidden="true" />
         </span>
         <div className="flex gap-2">
           <Badge tone={project.status === 'COMPLETED' ? 'success' : 'brand'}>
@@ -35,11 +35,11 @@ function ProjectCard({
           <Badge tone="neutral">{project.visibility}</Badge>
         </div>
       </div>
-      <h2 className="type-display mt-5 text-lg font-bold text-ink">{project.name}</h2>
-      <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted">
+      <h2 className="type-display mt-4 text-xl font-bold text-ink">{project.name}</h2>
+      <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted">
         {project.objective ?? project.description}
       </p>
-      <div className="mt-4">
+      <div className="mt-5">
         <div className="flex justify-between text-xs font-semibold text-muted">
           <span>{progress}% complete</span>
           <span>{project.memberCount ?? 0} collaborators</span>
@@ -54,16 +54,16 @@ function ProjectCard({
         ))}
         {project.category ? <Badge tone="neutral">{project.category}</Badge> : null}
       </div>
-      <div className="mt-5 flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
-        <Button size="sm" variant="secondary" onClick={onOpen}>
+      <div className="mt-auto flex flex-wrap justify-end gap-2 border-t border-line pt-4" onClick={(event) => event.stopPropagation()}>
+        <Button size="sm" variant="secondary" onClick={onOpen} className="min-h-10 rounded-xl px-4">
           {project.isMember ? 'Enter project' : 'More info'}
         </Button>
         {!project.isMember && project.membershipStatus === 'PENDING' ? (
-          <Button size="sm" variant="ghost" disabled>
+          <Button size="sm" variant="ghost" disabled className="min-h-10 rounded-xl px-4">
             Requested
           </Button>
         ) : !project.isMember && project.visibility !== 'PRIVATE' ? (
-          <Button size="sm" onClick={onJoin} disabled={joinPending}>
+          <Button size="sm" onClick={onJoin} disabled={joinPending} className="min-h-10 rounded-xl px-4">
             {joinPending ? 'Requesting…' : 'Request to join'}
           </Button>
         ) : null}
@@ -202,12 +202,18 @@ export function Projects({ onNavigate }: { onNavigate: (target: string) => void 
                     key={project.id}
                     type="button"
                     onClick={() => onNavigate(`/projects/${project.id}`)}
-                    className="w-full rounded-xl bg-slate-50 p-3 text-left hover:bg-brand-50"
+                    className="flex w-full items-center gap-3 rounded-xl border border-transparent bg-slate-50 p-3 text-left transition hover:border-brand-200 hover:bg-brand-50"
                   >
-                    <span className="block text-sm font-bold text-ink">{project.name}</span>
-                    <span className="mt-1 block text-xs text-muted">
-                      {project.progressPercent ?? 0}% complete
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
+                      <FolderKanban className="h-4 w-4" aria-hidden="true" />
                     </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold text-ink">{project.name}</span>
+                      <span className="mt-1 block text-xs text-muted">
+                        {project.progressPercent ?? 0}% complete
+                      </span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
                   </button>
                 ))}
               </div>
@@ -223,9 +229,9 @@ export function Projects({ onNavigate }: { onNavigate: (target: string) => void 
               <Badge tone="neutral">Live</Badge>
             </div>
             {activity.length ? (
-              <div className="mt-4 space-y-3">
+              <div className="mt-4 divide-y divide-line">
                 {activity.map((entry) => (
-                  <p key={entry.id} className="text-sm text-muted">
+                  <p key={entry.id} className="py-3 text-sm leading-6 text-muted first:pt-0 last:pb-0">
                     {entry.message}
                   </p>
                 ))}

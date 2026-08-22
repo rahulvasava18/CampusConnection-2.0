@@ -158,11 +158,11 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
         {items.map((team) => (
           <Card
             key={team.id}
-            className="theme-team-card group p-5 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"
+            className="theme-team-card group flex h-full flex-col p-5 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md sm:p-6"
           >
             <div className="flex items-start justify-between gap-3">
-              <span className="rounded-xl bg-brand-50 p-2.5 text-brand-600">
-                <Users className="h-5 w-5" aria-hidden="true" />
+              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-600">
+                <Users className="h-6 w-6" aria-hidden="true" />
               </span>
               <div className="flex gap-2">
                 <Badge tone={team.status === 'COMPLETED' ? 'neutral' : 'success'}>
@@ -171,23 +171,23 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
                 <Badge tone="neutral">{team.visibility.toLowerCase()}</Badge>
               </div>
             </div>
-            <h2 className="type-display mt-5 text-lg font-bold text-ink">{team.name}</h2>
-            <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted">
+            <h2 className="type-display mt-4 text-xl font-bold text-ink">{team.name}</h2>
+            <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted">
               {team.goal ?? team.description}
             </p>
-            <p className="mt-4 text-xs font-semibold text-muted">
+            <p className="mt-4 text-sm font-semibold text-muted">
               {team.memberCount ?? 0}
               {team.maxMembers ? ` / ${team.maxMembers}` : ''} members{' '}
               {team.category ? `· ${team.category}` : ''}
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               {team.tags?.slice(0, 5).map((tag) => (
                 <Badge key={tag}>{tag}</Badge>
               ))}
             </div>
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-auto flex flex-wrap justify-end gap-2 border-t border-line pt-4">
               {team.isMember ? (
-                <Button size="sm" onClick={() => onNavigate(`/teams/${team.id}`)}>
+                <Button size="sm" onClick={() => onNavigate(`/teams/${team.id}`)} className="min-h-10 rounded-xl px-4">
                   Enter →
                 </Button>
               ) : (
@@ -195,13 +195,14 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
                   size="sm"
                   variant="secondary"
                   onClick={() => onNavigate(`/teams/${team.id}`)}
+                  className="min-h-10 rounded-xl px-4"
                 >
                   More details →
                 </Button>
               )}
               {!team.isMember && team.visibility !== 'PRIVATE' ? (
                 team.membershipStatus === 'PENDING' ? (
-                  <Button size="sm" variant="ghost" disabled>
+                  <Button size="sm" variant="ghost" disabled className="min-h-10 rounded-xl px-4">
                     Requested
                   </Button>
                 ) : (
@@ -209,6 +210,7 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
                     size="sm"
                     onClick={() => join.mutate(team.id)}
                     disabled={join.isPending && join.variables === team.id}
+                    className="min-h-10 rounded-xl px-4"
                   >
                     {join.isPending && join.variables === team.id ? 'Requesting…' : 'Join'}
                   </Button>
