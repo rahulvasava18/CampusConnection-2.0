@@ -21,7 +21,7 @@ function signature(parameters: Record<string, string>, secret: string): string {
 }
 
 export interface MediaStorage {
-  uploadImage(file: Express.Multer.File): Promise<UploadedMedia>;
+  uploadImage(file: Express.Multer.File, folder?: string): Promise<UploadedMedia>;
   deleteImage(publicId: string): Promise<void>;
 }
 
@@ -42,10 +42,12 @@ export class CloudinaryMediaStorage implements MediaStorage {
     };
   }
 
-  async uploadImage(file: Express.Multer.File): Promise<UploadedMedia> {
+  async uploadImage(
+    file: Express.Multer.File,
+    folder = 'campusconnection/posts',
+  ): Promise<UploadedMedia> {
     const configuration = this.configuration();
     const timestamp = String(Math.floor(Date.now() / 1000));
-    const folder = 'campusconnection/posts';
     const parameters = { folder, timestamp };
     const form = new FormData();
     const fileBytes = new Uint8Array(file.buffer.byteLength);

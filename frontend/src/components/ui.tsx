@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { LoaderCircle, RefreshCcw, ShieldAlert, Sparkles } from 'lucide-react';
 
 export function cn(...classes: Array<string | false | null | undefined>) {
@@ -69,6 +69,7 @@ export function Avatar({
   size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const initials = (name ?? 'CC')
     .split(' ')
     .map((part) => part[0])
@@ -76,10 +77,15 @@ export function Avatar({
     .slice(0, 2)
     .toUpperCase();
 
-  return src ? (
+  useEffect(() => {
+    setImageFailed(false);
+  }, [src]);
+
+  return src && !imageFailed ? (
     <img
       src={src}
       alt={name ?? 'Profile'}
+      onError={() => setImageFailed(true)}
       className={cn(
         'shrink-0 rounded-full object-cover ring-2 ring-brand-100 transition duration-200',
         size === 'sm' && 'h-8 w-8',

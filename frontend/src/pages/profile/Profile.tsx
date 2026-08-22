@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ProfileView, SocialPostView } from '@campusconnection/shared';
+import type { ProfileView, SocialPostView, UserView } from '@campusconnection/shared';
 import {
   ArrowUpRight,
   BriefcaseBusiness,
+  Camera,
   CalendarDays,
   Check,
   Edit3,
@@ -13,6 +15,10 @@ import {
   MessageCircle,
   Save,
   Sparkles,
+  Trash2,
+  X,
+  ZoomIn,
+  ZoomOut,
   Users,
 } from 'lucide-react';
 import {
@@ -36,7 +42,11 @@ import {
 } from '../../lib/api-state';
 import type { useAuthStore } from '../../features/auth/auth.store';
 import { updateProfile, type ProfileUpdateInput } from '../../features/auth/auth.api';
-import { getProfile } from '../../features/profile/profile.api';
+import {
+  getProfile,
+  removeProfileAvatar,
+  uploadProfileAvatar,
+} from '../../features/profile/profile.api';
 import { createDirectConversation } from '../../features/communication/communication.api';
 import {
   cancelConnection,
@@ -298,6 +308,264 @@ function ProfileEdit({ profile, onSaved }: { profile: ProfileView; onSaved: () =
   );
 }
 
+const avatarCropSize = 320;
+const acceptedAvatarTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const maxAvatarBytes = 8 * 1024 * 1024;
+
+function ProfilePhotoEditor({
+  name,
+  currentAvatarUrl,
+  onClose,
+  onUpdated,
+}: {
+  name: string;
+  currentAvatarUrl: string | undefined;
+  onClose: () => void;
+  onUpdated: (user: UserView) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dragRef = useRef<
+    { pointerX: number; pointerY: number; offsetX: number; offsetY: number } | undefined
+  >(undefined);
+  const [image, setImage] = useState<HTMLImageElement>();
+  const [selectedFile, setSelectedFile] = useState<File>();
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [error, setError] = useState<string>();
+  const upload = useMutation({
+    mutationFn: async () => {
+      if (!image || !selectedFile) throw new Error('Choose a profile photo first.');
+      const cropped = await cropImage(image, zoom, offset);
+      return uploadProfileAvatar(cropped, selectedFile.name);
+    },
+    onSuccess: onUpdated,
+    onError: (cause) => setError(apiErrorMessage(cause, 'Unable to upload profile photo. Please try again.')),
+  });
+  const remove = useMutation({
+    mutationFn: () => removeProfileAvatar(),
+    onSuccess: onUpdated,
+    onError: (cause) => setError(apiErrorMessage(cause, 'Unable to remove profile photo. Please try again.')),
+  });
+  const busy = upload.isPending || remove.isPending;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busy) onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [busy, onClose]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !image) return;
+    canvas.width = avatarCropSize;
+    canvas.height = avatarCropSize;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const scale = Math.max(avatarCropSize / image.naturalWidth, avatarCropSize / image.naturalHeight) * zoom;
+    const width = image.naturalWidth * scale;
+    const height = image.naturalHeight * scale;
+    context.clearRect(0, 0, avatarCropSize, avatarCropSize);
+    context.fillStyle = '#e2e8f0';
+    context.fillRect(0, 0, avatarCropSize, avatarCropSize);
+    context.drawImage(
+      image,
+      (avatarCropSize - width) / 2 + offset.x,
+      (avatarCropSize - height) / 2 + offset.y,
+      width,
+      height,
+    );
+  }, [image, offset, zoom]);
+
+  const selectFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!acceptedAvatarTypes.has(file.type)) {
+      setError('Choose a JPG, PNG, or WEBP image.');
+      return;
+    }
+    if (file.size > maxAvatarBytes) {
+      setError('That image is too large. Choose a smaller image.');
+      return;
+    }
+    setError(undefined);
+    const url = URL.createObjectURL(file);
+    const nextImage = new Image();
+    nextImage.onload = () => {
+      URL.revokeObjectURL(url);
+      setImage(nextImage);
+      setSelectedFile(file);
+      setZoom(1);
+      setOffset({ x: 0, y: 0 });
+    };
+    nextImage.onerror = () => {
+      URL.revokeObjectURL(url);
+      setError('That image could not be opened. Choose another photo.');
+    };
+    nextImage.src = url;
+  };
+
+  const resetCrop = () => {
+    setZoom(1);
+    setOffset({ x: 0, y: 0 });
+  };
+  const changeZoom = (amount: number) => {
+    const nextZoom = Math.min(3, Math.max(1, zoom + amount));
+    setZoom(nextZoom);
+    if (image) setOffset(clampCropOffset(image, nextZoom, offset));
+  };
+  const startDrag = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (!image || busy) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      offsetX: offset.x,
+      offsetY: offset.y,
+    };
+  };
+  const moveDrag = (event: PointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag || !image) return;
+    setOffset(
+      clampCropOffset(image, zoom, {
+        x: drag.offsetX + event.clientX - drag.pointerX,
+        y: drag.offsetY + event.clientY - drag.pointerY,
+      }),
+    );
+  };
+
+  const modal = (
+    <div className="fixed inset-0 z-[1000] flex min-h-screen items-center justify-center bg-slate-950/55 p-4" role="presentation">
+      <div
+        className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-[var(--surface-elevated)] p-5 shadow-2xl sm:p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-photo-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="type-ui text-[10px] font-bold uppercase tracking-[0.16em] text-brand-600">Profile photo</p>
+            <h2 id="profile-photo-title" className="type-display mt-1 text-xl font-bold text-ink">Edit profile photo</h2>
+          </div>
+          <button
+            type="button"
+            aria-label="Close profile photo editor"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-full p-2 text-muted transition hover:bg-brand-50 hover:text-ink disabled:opacity-50"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mt-5 flex justify-center rounded-2xl bg-slate-100 p-5 dark:bg-slate-900">
+          {image ? (
+            <canvas
+              ref={canvasRef}
+              aria-label="Drag to position your profile photo"
+              className="h-64 w-64 touch-none cursor-grab rounded-full border-4 border-white object-cover shadow-lg active:cursor-grabbing sm:h-72 sm:w-72"
+              onPointerDown={startDrag}
+              onPointerMove={moveDrag}
+              onPointerUp={() => { dragRef.current = undefined; }}
+              onPointerCancel={() => { dragRef.current = undefined; }}
+            />
+          ) : (
+            <Avatar name={name} src={currentAvatarUrl} size="xl" className="h-64 w-64 border-4 border-white text-4xl sm:h-72 sm:w-72" />
+          )}
+        </div>
+
+        {image ? (
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <Button type="button" size="sm" variant="ghost" onClick={() => changeZoom(-0.25)} disabled={busy || zoom <= 1} aria-label="Zoom out">
+              <ZoomOut className="h-4 w-4" />
+              Zoom out
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => changeZoom(0.25)} disabled={busy || zoom >= 3} aria-label="Zoom in">
+              <ZoomIn className="h-4 w-4" />
+              Zoom in
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={resetCrop} disabled={busy}>
+              Reset
+            </Button>
+          </div>
+        ) : null}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          onChange={(event) => {
+            selectFile(event.target.files?.[0]);
+            event.currentTarget.value = '';
+          }}
+        />
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={busy}>
+            <Camera className="h-4 w-4" />
+            {image ? 'Select another photo' : 'Select photo'}
+          </Button>
+          {currentAvatarUrl ? (
+            <Button type="button" variant="danger" onClick={() => remove.mutate()} disabled={busy}>
+              <Trash2 className="h-4 w-4" />
+              Remove photo
+            </Button>
+          ) : null}
+        </div>
+        {error ? <p className="mt-3 text-sm font-semibold text-red-600">{error}</p> : null}
+        <div className="mt-6 flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="button" onClick={() => upload.mutate()} disabled={busy || !image || !selectedFile}>
+            {upload.isPending ? 'Uploading…' : 'Confirm photo'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return createPortal(modal, document.body);
+}
+
+async function cropImage(image: HTMLImageElement, zoom: number, offset: { x: number; y: number }): Promise<Blob> {
+  const outputSize = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = outputSize;
+  canvas.height = outputSize;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Photo editing is unavailable in this browser.');
+  const scale = Math.max(avatarCropSize / image.naturalWidth, avatarCropSize / image.naturalHeight) * zoom;
+  const width = image.naturalWidth * scale;
+  const height = image.naturalHeight * scale;
+  const outputScale = outputSize / avatarCropSize;
+  context.drawImage(
+    image,
+    ((avatarCropSize - width) / 2 + offset.x) * outputScale,
+    ((avatarCropSize - height) / 2 + offset.y) * outputScale,
+    width * outputScale,
+    height * outputScale,
+  );
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Photo editing failed.'))), 'image/jpeg', 0.9);
+  });
+}
+
+function clampCropOffset(
+  image: HTMLImageElement,
+  zoom: number,
+  offset: { x: number; y: number },
+): { x: number; y: number } {
+  const scale = Math.max(avatarCropSize / image.naturalWidth, avatarCropSize / image.naturalHeight) * zoom;
+  const maxX = Math.max(0, (image.naturalWidth * scale - avatarCropSize) / 2);
+  const maxY = Math.max(0, (image.naturalHeight * scale - avatarCropSize) / 2);
+  return {
+    x: Math.min(maxX, Math.max(-maxX, offset.x)),
+    y: Math.min(maxY, Math.max(-maxY, offset.y)),
+  };
+}
+
 export function Profile({
   user,
   onNavigate,
@@ -312,6 +580,7 @@ export function Profile({
   const ownProfile = targetUserId === user.id;
   const [tab, setTab] = useState<ProfileTab>('overview');
   const [editing, setEditing] = useState(false);
+  const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
   const [postFilter, setPostFilter] = useState('ALL');
   const profileQuery = useInfiniteQuery({
     queryKey: ['profile', targetUserId],
@@ -453,12 +722,24 @@ export function Profile({
         <div className="px-5 pb-5 sm:px-8">
           <div className="-mt-12 flex flex-col gap-5 sm:-mt-16 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex min-w-0 items-end gap-4">
-              <Avatar
-                name={identity.displayName}
-                src={identity.avatarUrl}
-                size="xl"
-                className="h-24 w-24 border-4 border-white sm:h-32 sm:w-32"
-              />
+              <div className="relative shrink-0">
+                <Avatar
+                  name={identity.displayName}
+                  src={identity.avatarUrl}
+                  size="xl"
+                  className="h-24 w-24 border-4 border-white sm:h-32 sm:w-32"
+                />
+                {ownProfile ? (
+                  <button
+                    type="button"
+                    aria-label="Edit profile photo"
+                    onClick={() => setPhotoEditorOpen(true)}
+                    className="absolute bottom-0 right-0 inline-flex h-9 w-9 items-center justify-center rounded-full border-4 border-white bg-brand-700 text-white shadow-md transition hover:bg-brand-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+                  >
+                    <Camera className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
               <div className="min-w-0 pb-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="type-display truncate text-2xl font-bold text-ink sm:text-3xl">
@@ -597,6 +878,31 @@ export function Profile({
           </div>
         </div>
       </Card>
+      {photoEditorOpen && ownProfile ? (
+        <ProfilePhotoEditor
+          name={identity.displayName}
+          currentAvatarUrl={identity.avatarUrl}
+          onClose={() => setPhotoEditorOpen(false)}
+          onUpdated={(nextUser) => {
+            queryClient.setQueryData<{ pages: ProfileView[]; pageParams: unknown[] }>(
+              ['profile', targetUserId],
+              (current) =>
+                current
+                  ? {
+                      ...current,
+                      pages: current.pages.map((page, index) =>
+                        index === 0
+                          ? { ...page, user: { ...page.user, ...nextUser } }
+                          : page,
+                      ),
+                    }
+                  : current,
+            );
+            setPhotoEditorOpen(false);
+            void queryClient.invalidateQueries({ queryKey: ['profile', targetUserId] });
+          }}
+        />
+      ) : null}
       {editing && ownProfile ? (
         <ProfileEdit
           profile={profile}

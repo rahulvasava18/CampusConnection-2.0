@@ -248,6 +248,29 @@ export const openApiDocument = {
         responses: { '200': { description: 'Session list' } },
       },
     },
+    '/me/avatar': {
+      post: {
+        summary: 'Upload a cropped profile photo for the authenticated user',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { 'multipart/form-data': { schema: { type: 'object' } } },
+        },
+        responses: {
+          '200': { description: 'Profile photo updated' },
+          '403': { description: 'CSRF validation failed' },
+          '422': { description: 'Unsupported or oversized image' },
+        },
+      },
+      delete: {
+        summary: 'Remove the authenticated user profile photo',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': { description: 'Profile photo removed' },
+          '403': { description: 'CSRF validation failed' },
+        },
+      },
+    },
     '/me/sessions/{sessionId}': {
       delete: {
         summary: 'Revoke one session',

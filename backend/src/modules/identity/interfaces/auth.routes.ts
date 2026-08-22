@@ -1,4 +1,5 @@
-import { Router, type Request } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
+import multer, { MulterError } from 'multer';
 import type { AuthService } from '../application/auth.service';
 import type { AccountDeletionService } from '../application/account-deletion.service';
 import { validateRequest } from '../../../shared/validation/validate';
@@ -27,6 +28,31 @@ import {
   verifyEmailSchema,
 } from './auth.schemas';
 import type { RequestMeta } from './auth.types';
+
+const allowedAvatarTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    const extension = file.originalname.toLowerCase().split('.').pop();
+    const allowedExtension = ['jpg', 'jpeg', 'png', 'webp'].includes(extension ?? '');
+    if (!allowedAvatarTypes.has(file.mimetype) || !allowedExtension) {
+      callback(new AppError('MEDIA_TYPE_NOT_SUPPORTED', "That image type isn't supported.", 422));
+      return;
+    }
+    callback(null, true);
+  },
+});
+
+function uploadAvatar(req: Request, res: Response, next: NextFunction): void {
+  avatarUpload.single('avatar')(req, res, (error: unknown) => {
+    if (error instanceof MulterError && error.code === 'LIMIT_FILE_SIZE') {
+      next(new AppError('MEDIA_TOO_LARGE', 'That image is too large. Choose a smaller image.', 422));
+      return;
+    }
+    next(error);
+  });
+}
 
 function requestMeta(req: Request): RequestMeta {
   return {
@@ -258,6 +284,33 @@ export function createMeRouter(authService: AuthService): Router {
   router.get('/me', requireAuth, (req, res) =>
     res.status(200).json({ data: { user: requireRequestAuth(req).user } }),
   );
+  router.post('/me/avatar', requireAuth, requireCsrf, uploadAvatar, async (req, res, next) => {
+    try {
+      if (!req.file) {
+        throw new AppError('MEDIA_REQUIRED', 'Choose a profile photo to upload.', 422);
+      }
+      res.status(200).json({
+        data: {
+          user: await authService.updateAvatar(
+            requireRequestAuth(req),
+            req.file,
+            requestMeta(req),
+          ),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+  router.delete('/me/avatar', requireAuth, requireCsrf, async (req, res, next) => {
+    try {
+      res.status(200).json({
+        data: { user: await authService.removeAvatar(requireRequestAuth(req), requestMeta(req)) },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
   router.patch(
     '/me',
     requireAuth,

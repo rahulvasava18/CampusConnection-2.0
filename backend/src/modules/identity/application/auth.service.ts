@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import mongoose, { Types } from 'mongoose';
+import type { Express } from 'express';
 import type { AccountState, EventType, SessionView, UserView } from '@campusconnection/shared';
 import { AppError } from '../../../shared/errors/app-error';
 import {
@@ -47,6 +48,10 @@ import {
   type GoogleOAuthClient,
   type GoogleIdentity,
 } from '../infrastructure/google-oauth.service';
+import {
+  CloudinaryMediaStorage,
+  type MediaStorage,
+} from '../../../infrastructure/media/media-storage';
 
 export interface ProfileUpdateInput {
   displayName?: string;
@@ -81,6 +86,7 @@ interface ServiceDependencies {
   googleAuthStates?: GoogleAuthStateRepository;
   passwordResetAuthorizations?: PasswordResetAuthorizationRepository;
   googleOAuth?: GoogleOAuthClient;
+  mediaStorage?: MediaStorage;
 }
 
 export class AuthService {
@@ -94,6 +100,7 @@ export class AuthService {
   private readonly googleAuthStates: GoogleAuthStateRepository;
   private readonly passwordResetAuthorizations: PasswordResetAuthorizationRepository;
   private readonly googleOAuth: GoogleOAuthClient | undefined;
+  private readonly mediaStorage: MediaStorage;
   private emailService: EmailService | undefined;
 
   public constructor(dependencies: ServiceDependencies = {}) {
@@ -108,6 +115,7 @@ export class AuthService {
     this.passwordResetAuthorizations =
       dependencies.passwordResetAuthorizations ?? new PasswordResetAuthorizationRepository();
     this.googleOAuth = dependencies.googleOAuth;
+    this.mediaStorage = dependencies.mediaStorage ?? new CloudinaryMediaStorage();
     this.emailService = dependencies.emailService;
   }
 
@@ -795,6 +803,84 @@ export class AuthService {
     return toUserView(user);
   }
 
+  public async updateAvatar(
+    context: AuthContext,
+    file: Express.Multer.File,
+    meta: RequestMeta,
+  ): Promise<UserView> {
+    const user = await this.users.findById(context.userId);
+    if (!user) throw new AppError('AUTHENTICATION_REQUIRED', 'Authentication is required.', 401);
+
+    const previousAvatarUrl = user.avatarUrl;
+    const uploaded = await this.mediaStorage.uploadImage(
+      file,
+      `campusconnection/avatars/${user.id}`,
+    );
+    try {
+      await this.transaction(async (session) => {
+        user.avatarUrl = uploaded.url;
+        await user.save({ session });
+        await this.events.record(
+          {
+            eventType: 'PROFILE_UPDATED',
+            producer: 'identity',
+            aggregateType: 'User',
+            aggregateId: user.id,
+            actorId: user.id,
+            correlationId: meta.correlationId ?? meta.requestId ?? randomUUID(),
+            payload: { userId: user.id, fields: ['avatarUrl'] },
+          },
+          session,
+        );
+      });
+    } catch (error) {
+      await this.cleanupUploadedAvatar(uploaded.publicId);
+      throw error;
+    }
+
+    await this.cleanupPreviousAvatar(previousAvatarUrl);
+    return toUserView(user);
+  }
+
+  public async removeAvatar(context: AuthContext, meta: RequestMeta): Promise<UserView> {
+    const user = await this.users.findById(context.userId);
+    if (!user) throw new AppError('AUTHENTICATION_REQUIRED', 'Authentication is required.', 401);
+    const previousAvatarUrl = user.avatarUrl;
+
+    await this.transaction(async (session) => {
+      user.set('avatarUrl', undefined);
+      await user.save({ session });
+      await this.events.record(
+        {
+          eventType: 'PROFILE_UPDATED',
+          producer: 'identity',
+          aggregateType: 'User',
+          aggregateId: user.id,
+          actorId: user.id,
+          correlationId: meta.correlationId ?? meta.requestId ?? randomUUID(),
+          payload: { userId: user.id, fields: ['avatarUrl'] },
+        },
+        session,
+      );
+    });
+
+    await this.cleanupPreviousAvatar(previousAvatarUrl);
+    return toUserView(user);
+  }
+
+  private async cleanupPreviousAvatar(avatarUrl: string | undefined): Promise<void> {
+    const publicId = cloudinaryPublicId(avatarUrl);
+    if (publicId) await this.cleanupUploadedAvatar(publicId);
+  }
+
+  private async cleanupUploadedAvatar(publicId: string): Promise<void> {
+    try {
+      await this.mediaStorage.deleteImage(publicId);
+    } catch (error) {
+      logger.warn({ err: error, publicId }, 'Profile avatar cleanup failed');
+    }
+  }
+
   public async listSessions(context: AuthContext): Promise<SessionView[]> {
     const sessions = await this.sessions.listForUser(new Types.ObjectId(context.userId));
     return sessions.map((session) => ({
@@ -921,6 +1007,22 @@ export class AuthService {
       discardRecordedEvents(session);
       await session.endSession();
     }
+  }
+}
+
+function cloudinaryPublicId(avatarUrl: string | undefined): string | undefined {
+  if (!avatarUrl) return undefined;
+  try {
+    const url = new URL(avatarUrl);
+    if (!url.hostname.endsWith('cloudinary.com')) return undefined;
+    const marker = '/image/upload/';
+    const markerIndex = url.pathname.indexOf(marker);
+    if (markerIndex === -1) return undefined;
+    let publicPath = url.pathname.slice(markerIndex + marker.length).replace(/^v\d+\//, '');
+    publicPath = publicPath.replace(/\.[a-z0-9]+$/i, '');
+    return publicPath.startsWith('campusconnection/avatars/') ? publicPath : undefined;
+  } catch {
+    return undefined;
   }
 }
 
