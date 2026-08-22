@@ -188,7 +188,6 @@ function ProfileEdit({ profile, onSaved }: { profile: ProfileView; onSaved: () =
     skills: profile.user.skills.join(', '),
     interests: profile.user.interests.join(', '),
     goals: profile.user.goals.join(', '),
-    avatarUrl: profile.user.avatarUrl ?? '',
   });
   const save = useMutation({
     mutationFn: (): Promise<unknown> => {
@@ -202,7 +201,6 @@ function ProfileEdit({ profile, onSaved }: { profile: ProfileView; onSaved: () =
         interests: splitList(values.interests),
         goals: splitList(values.goals),
         ...(values.graduationYear.trim() ? { graduationYear: Number(values.graduationYear) } : {}),
-        ...(values.avatarUrl.trim() ? { avatarUrl: values.avatarUrl.trim() } : {}),
       };
       return updateProfile(input);
     },
@@ -256,13 +254,6 @@ function ProfileEdit({ profile, onSaved }: { profile: ProfileView; onSaved: () =
           value={values.graduationYear}
           onChange={(event) => set('graduationYear', event.target.value)}
           inputMode="numeric"
-        />
-        <Field
-          label="Avatar image URL"
-          value={values.avatarUrl}
-          onChange={(event) => set('avatarUrl', event.target.value)}
-          hint="Uses the existing avatar URL field; profile upload is not configured."
-          className="sm:col-span-2"
         />
         <TextareaField
           label="Bio"
