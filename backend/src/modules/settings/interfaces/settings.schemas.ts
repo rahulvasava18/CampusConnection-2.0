@@ -40,3 +40,14 @@ export const passwordUpdate = z
     if (value.newPassword !== value.confirmPassword)
       context.addIssue({ code: 'custom', path: ['confirmPassword'], message: 'Passwords do not match.' });
   });
+
+export const passwordRecoveryUpdate = z
+  .object({
+    newPassword: z.string().min(8).max(128),
+    confirmPassword: z.string().min(8).max(128),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.newPassword !== value.confirmPassword)
+      context.addIssue({ code: 'custom', path: ['confirmPassword'], message: 'Passwords do not match.' });
+  });

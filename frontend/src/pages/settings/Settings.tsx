@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
@@ -46,6 +46,8 @@ import {
   revokeOtherSessions,
   revokeSession,
   setPassword,
+  setPasswordWithRecovery,
+  startGooglePasswordRecovery,
   updateSettings,
 } from '../../features/settings/settings.api';
 
@@ -128,6 +130,9 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [recoveryStatus, setRecoveryStatus] = useState<'idle' | 'starting' | 'waiting' | 'verified'>('idle');
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const recoveryPopup = useRef<Window | null>(null);
 
   const settings = useQuery({ queryKey: ['settings'], queryFn: getSettings });
   const sessions = useQuery({
@@ -173,19 +178,87 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
   });
   const passwordMutation = useMutation({
     mutationFn: () =>
-      setPassword({
-        ...(settings.data?.passwordConfigured ? { currentPassword } : {}),
-        newPassword,
-        confirmPassword,
-      }),
+      recoveryStatus === 'verified'
+        ? setPasswordWithRecovery({ newPassword, confirmPassword })
+        : setPassword({
+            ...(settings.data?.passwordConfigured ? { currentPassword } : {}),
+            newPassword,
+            confirmPassword,
+          }),
     onSuccess: (data) => {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      setRecoveryStatus('idle');
+      setRecoveryError(null);
       setSavedMessage('Password set successfully.');
       queryClient.setQueryData(['settings'], data);
     },
   });
+
+  const beginPasswordRecovery = () => {
+    setRecoveryError(null);
+    const popup = window.open(
+      'about:blank',
+      'campusconnection-password-recovery',
+      'popup,width=520,height=720',
+    );
+    if (!popup) {
+      setRecoveryError('Your browser blocked the Google verification window. Allow popups and try again.');
+      return;
+    }
+    recoveryPopup.current = popup;
+    setRecoveryStatus('starting');
+    void startGooglePasswordRecovery()
+      .then(({ authorizationUrl }) => {
+        if (popup.closed) {
+          setRecoveryStatus('idle');
+          setRecoveryError('Google verification was cancelled.');
+          return;
+        }
+        popup.location.assign(authorizationUrl);
+        setRecoveryStatus('waiting');
+      })
+      .catch((error) => {
+        popup.close();
+        setRecoveryStatus('idle');
+        setRecoveryError(apiErrorMessage(error, 'Unable to start Google verification.'));
+      });
+  };
+
+  useEffect(() => {
+    if (recoveryStatus !== 'waiting') return;
+    const expectedOrigin = window.location.origin;
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== expectedOrigin || event.source !== recoveryPopup.current) return;
+      if (event.data?.type !== 'campusconnection-password-recovery') return;
+      recoveryPopup.current?.close();
+      if (event.data.status === 'verified') {
+        setRecoveryStatus('verified');
+        setRecoveryError(null);
+        setSavedMessage(null);
+      } else {
+        setRecoveryStatus('idle');
+        setRecoveryError(
+          typeof event.data.message === 'string'
+            ? event.data.message
+            : 'Google verification could not be completed.',
+        );
+      }
+    };
+    const timer = window.setInterval(() => {
+      if (recoveryPopup.current?.closed) {
+        recoveryPopup.current = null;
+        setRecoveryStatus('idle');
+        setRecoveryError('Google verification was cancelled.');
+      }
+    }, 500);
+    window.addEventListener('message', onMessage);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('message', onMessage);
+    };
+  }, [recoveryStatus]);
   const deleteMutation = useMutation({
     mutationFn: deleteAccount,
     onSuccess: () => {
@@ -501,7 +574,7 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
                   passwordMutation.mutate();
                 }}
               >
-                {settings.data.passwordConfigured ? (
+                {settings.data.passwordConfigured && recoveryStatus !== 'verified' ? (
                   <Field
                     label="Current password"
                     type="password"
@@ -510,6 +583,37 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
                     autoComplete="current-password"
                     required
                   />
+                ) : null}
+                {settings.data.passwordConfigured ? (
+                  <div className="rounded-xl border border-brand-100 bg-brand-50/60 p-3 sm:col-span-2">
+                    <p className="text-xs font-semibold text-brand-900">Forgot your current password?</p>
+                    <p className="mt-1 text-xs leading-5 text-brand-800/80">
+                      Verify your identity with Google to reset your password securely.
+                    </p>
+                    {recoveryStatus === 'verified' ? (
+                      <p className="mt-2 text-xs font-bold text-emerald-700" role="status">
+                        Identity verified. You can now set a new password.
+                      </p>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="mt-3"
+                        onClick={beginPasswordRecovery}
+                        disabled={recoveryStatus === 'starting' || recoveryStatus === 'waiting'}
+                      >
+                        {recoveryStatus === 'starting' || recoveryStatus === 'waiting'
+                          ? 'Waiting for Google…'
+                          : 'Continue with Google'}
+                      </Button>
+                    )}
+                    {recoveryError ? (
+                      <p className="mt-2 text-xs font-semibold text-red-600" role="alert">
+                        {recoveryError}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
                 <Field
                   label="New password"
@@ -530,10 +634,18 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
                   required
                 />
                 <div className="flex items-end sm:col-span-2">
-                  <Button type="submit" disabled={passwordMutation.isPending}>
+                  <Button
+                    type="submit"
+                    disabled={
+                      passwordMutation.isPending ||
+                      (settings.data.passwordConfigured && recoveryStatus !== 'verified' && !currentPassword)
+                    }
+                  >
                     {passwordMutation.isPending
                       ? 'Saving…'
-                      : settings.data.passwordConfigured
+                      : recoveryStatus === 'verified'
+                        ? 'Set new password'
+                        : settings.data.passwordConfigured
                         ? 'Change password'
                         : 'Set password'}
                   </Button>

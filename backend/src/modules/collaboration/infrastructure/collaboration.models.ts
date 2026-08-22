@@ -760,6 +760,9 @@ export interface EventDocument extends Document {
   rules: string[];
   teamId?: Types.ObjectId;
   communityId?: Types.ObjectId;
+  organizerClub?: Types.ObjectId;
+  createdBy?: Types.ObjectId;
+  registrationUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -796,6 +799,9 @@ const eventSchema = new Schema<EventDocument>(
     rules: { type: [String], default: [] },
     teamId: objectId,
     communityId: objectId,
+    organizerClub: { type: objectId, index: true },
+    createdBy: { type: objectId, index: true },
+    registrationUrl: { type: String, trim: true, maxlength: 500 },
   },
   { collection: 'events', timestamps: true },
 );

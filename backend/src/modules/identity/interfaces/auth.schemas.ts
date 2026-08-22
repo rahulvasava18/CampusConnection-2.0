@@ -32,6 +32,8 @@ export const resendVerificationSchema = z
 
 export const googleExchangeSchema = z.object({ code: z.string().trim().min(32).max(512) }).strict();
 
+export const googlePasswordRecoveryExchangeSchema = googleExchangeSchema;
+
 export const googleOnboardingSchema = z
   .object({
     onboardingToken: z.string().trim().min(32).max(512),

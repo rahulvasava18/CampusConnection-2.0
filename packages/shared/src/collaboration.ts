@@ -1,3 +1,5 @@
+import type { ClubSummaryView } from './clubs';
+
 export type CommunityPrivacy = 'PUBLIC' | 'CAMPUS' | 'PRIVATE';
 export type CommunityStatus = 'ACTIVE' | 'ARCHIVED' | 'DELETED';
 export type CommunityMemberRole = 'OWNER' | 'ADMIN' | 'MODERATOR' | 'MEMBER';
@@ -335,6 +337,7 @@ export interface EventView {
   description: string;
   organizerId: string;
   organizer?: CollaborationUserView;
+  organizerClub?: ClubSummaryView;
   category: string;
   tags: string[];
   coverImageUrl?: string;
@@ -353,6 +356,9 @@ export interface EventView {
   rules: string[];
   teamId?: string;
   communityId?: string;
+  organizerClubId?: string;
+  createdBy?: string;
+  registrationUrl?: string;
   isRegistered?: boolean;
   registrationStatus?: EventRegistrationStatus;
   canRegister?: boolean;

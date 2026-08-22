@@ -12,6 +12,7 @@ import { AdminAuditLogs } from './AdminAuditLogs';
 import { AdminNotifications } from './AdminNotifications';
 import { AdminModeration } from './AdminModeration';
 import { AdminSettings } from './AdminSettings';
+import { AdminClubs } from './AdminClubs';
 
 type AppUser = NonNullable<ReturnType<typeof useAuthStore.getState>['user']>;
 
@@ -31,6 +32,7 @@ export function AdminRoutes({ user, onNavigate, onSignOut }: { user: AppUser; on
       : pathname === '/admin/comments' ? <AdminContent type="COMMENT" onNavigate={onNavigate} />
       : pathname === '/admin/teams' ? <AdminContent type="TEAM" onNavigate={onNavigate} />
       : pathname === '/admin/communities' ? <AdminContent type="COMMUNITY" onNavigate={onNavigate} />
+      : pathname === '/admin/clubs' ? <AdminClubs />
       : pathname === '/admin/events' ? <AdminContent type="EVENT" onNavigate={onNavigate} />
       : pathname === '/admin/audit-logs' ? <AdminAuditLogs />
       : pathname === '/admin/notifications' ? <AdminNotifications onNavigate={onNavigate} />

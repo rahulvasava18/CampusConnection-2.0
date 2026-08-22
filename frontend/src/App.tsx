@@ -9,8 +9,11 @@ import { AppRoutes } from './routes/AppRoutes';
 import { routeFromPath, routePaths, type RouteId } from './lib/navigation';
 import { useAppStore } from './store/app-store';
 import { AdminRoutes } from './pages/admin/AdminRoutes';
+import { GooglePasswordRecoveryCallbackPage } from './features/auth/GooglePasswordRecoveryCallbackPage';
 
 export function App() {
+  const isPasswordRecoveryCallback =
+    window.location.pathname === '/auth/google/password-recovery/callback';
   const authStatus = useAuthStore((state) => state.status);
   const user = useAuthStore((state) => state.user);
   const setAnonymous = useAuthStore((state) => state.clearSession);
@@ -26,9 +29,9 @@ export function App() {
   });
 
   useEffect(() => {
-    if (authStatus !== 'unknown') return;
+    if (authStatus !== 'unknown' || isPasswordRecoveryCallback) return;
     void refreshSession().catch(() => setAnonymous());
-  }, [authStatus, setAnonymous]);
+  }, [authStatus, isPasswordRecoveryCallback, setAnonymous]);
 
   useEffect(() => {
     if (authStatus !== 'authenticated') return;
@@ -52,6 +55,8 @@ export function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [authStatus, setActiveSection]);
+
+  if (isPasswordRecoveryCallback) return <GooglePasswordRecoveryCallbackPage />;
 
   if (authStatus === 'unknown')
     return (

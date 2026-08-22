@@ -23,6 +23,30 @@ export function setPassword(input: {
   });
 }
 
+export function startGooglePasswordRecovery(): Promise<{ authorizationUrl: string }> {
+  return apiRequest<{ authorizationUrl: string }>('/auth/google/password-recovery/start', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export function exchangeGooglePasswordRecoveryCode(code: string): Promise<{ verified: true }> {
+  return apiRequest<{ verified: true }>('/auth/google/password-recovery/exchange', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
+export function setPasswordWithRecovery(input: {
+  newPassword: string;
+  confirmPassword: string;
+}) {
+  return apiRequest<UserSettingsView>('/settings/password/recovery', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 export function getSessions() {
   return apiRequest<SessionView[]>('/me/sessions');
 }

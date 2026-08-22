@@ -48,7 +48,7 @@ export function CommunityHeader({
             {onReport ? <Button size="sm" variant="ghost" onClick={onReport}>Report</Button> : null}
             {community.membershipStatus === 'PENDING' ? (
               <Button size="sm" variant="secondary" disabled>
-                Request pending
+                Requested
               </Button>
             ) : community.isMember ? (
               <Button size="sm" variant="secondary" disabled={busy} onClick={onLeave}>
@@ -56,7 +56,11 @@ export function CommunityHeader({
               </Button>
             ) : (
               <Button size="sm" variant="secondary" disabled={busy} onClick={onJoin}>
-                {busy ? 'Joining...' : 'Join community'}
+                {busy
+                  ? 'Updating...'
+                  : community.privacy === 'PRIVATE'
+                    ? 'Request to join'
+                    : 'Join community'}
               </Button>
             )}
             {community.isMember ? (

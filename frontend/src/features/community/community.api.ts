@@ -26,8 +26,8 @@ export const getCommunity = (id: string) => apiRequest<CommunityView>(`/communit
 
 export const createCommunity = (input: {
   name: string;
-  slug: string;
-  description: string;
+  slug?: string;
+  description?: string;
   category: string;
   tags?: string[];
   rules?: string[];

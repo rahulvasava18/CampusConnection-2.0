@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SearchResult } from '@campusconnection/shared';
 import { CommunityHeader } from './components/CommunityHeader';
+import { DiscussionCard } from './components/DiscussionCard';
 import {
   Avatar,
   Badge,
@@ -32,6 +33,7 @@ import {
   getCommunityBans,
   getCommunityMembers,
   getCommunityReports,
+  getDiscussions,
   getJoinRequests,
   inviteCommunityMember,
   joinCommunity,
@@ -47,7 +49,7 @@ import { search } from '../../features/discovery/discovery.api';
 import { ApiRequestError } from '../../lib/api-state';
 import { AdminReportDialog } from '../admin/AdminReportDialog';
 
-type CommunityTab = 'posts' | 'chat' | 'members' | 'about' | 'manage';
+type CommunityTab = 'home' | 'post' | 'chat' | 'members' | 'about' | 'manage' | 'settings';
 
 export function CommunityDetail({
   communityId,
@@ -58,7 +60,7 @@ export function CommunityDetail({
 }) {
   const queryClient = useQueryClient();
   const currentUserId = useAuthStore((state) => state.user?.id);
-  const [tab, setTab] = useState<CommunityTab>('posts');
+  const [tab, setTab] = useState<CommunityTab>('home');
   const [inviteSearch, setInviteSearch] = useState('');
   const [selectedInvitee, setSelectedInvitee] = useState<SearchResult | null>(null);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
@@ -67,6 +69,7 @@ export function CommunityDetail({
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  const [editPrivacy, setEditPrivacy] = useState<'PUBLIC' | 'CAMPUS' | 'PRIVATE'>('PUBLIC');
   const [editTags, setEditTags] = useState('');
   const [editRules, setEditRules] = useState('');
   const [editAvatarUrl, setEditAvatarUrl] = useState('');
@@ -80,7 +83,12 @@ export function CommunityDetail({
   const members = useQuery({
     queryKey: ['community-members', communityId],
     queryFn: () => getCommunityMembers(communityId),
-    enabled: Boolean(community.data?.isMember),
+    enabled: Boolean(community.data?.isMember) && (tab === 'members' || tab === 'manage'),
+  });
+  const discussions = useQuery({
+    queryKey: ['community-discussions', communityId],
+    queryFn: () => getDiscussions(communityId),
+    enabled: Boolean(community.data?.isMember) && tab === 'home',
   });
   const posts = useInfiniteQuery({
     queryKey: ['community-posts', communityId],
@@ -92,7 +100,8 @@ export function CommunityDetail({
   const requests = useQuery({
     queryKey: ['community-requests', communityId],
     queryFn: () => getJoinRequests(communityId),
-    enabled: tab === 'manage',
+    enabled:
+      tab === 'manage' && ['OWNER', 'ADMIN'].includes(community.data?.membershipRole ?? ''),
   });
   const bans = useQuery({
     queryKey: ['community-bans', communityId],
@@ -119,6 +128,7 @@ export function CommunityDetail({
     setEditCategory(community.data.category);
     setEditTags(community.data.tags.join(', '));
     setEditRules(community.data.rules.join('\n'));
+    setEditPrivacy(community.data.privacy);
     setEditAvatarUrl(community.data.avatarUrl ?? '');
     setEditBannerUrl(community.data.bannerUrl ?? '');
   }, [community.data]);
@@ -210,6 +220,7 @@ export function CommunityDetail({
           .filter(Boolean),
         ...(editAvatarUrl.trim() ? { avatarUrl: editAvatarUrl.trim() } : {}),
         ...(editBannerUrl.trim() ? { bannerUrl: editBannerUrl.trim() } : {}),
+        privacy: editPrivacy,
       }),
     onSuccess: invalidate,
   });
@@ -233,6 +244,7 @@ export function CommunityDetail({
       .includes(memberSearch.trim().toLowerCase()),
   );
   const postItems = paginatedItems(posts.data?.pages);
+  const discussionItems = collectionItems(discussions.data);
   const canManage = ['OWNER', 'ADMIN', 'MODERATOR'].includes(item.membershipRole ?? '');
   const canAdmin = ['OWNER', 'ADMIN'].includes(item.membershipRole ?? '');
   const inviteResults = collectionItems(inviteCandidates.data);
@@ -261,7 +273,7 @@ export function CommunityDetail({
         onBack={() => onNavigate('/communities')}
         onJoin={() => membership.mutate(false)}
         onLeave={() => membership.mutate(true)}
-        onCreateDiscussion={() => setTab('posts')}
+        onCreateDiscussion={() => setTab('post')}
         onInvite={canAdmin ? () => setTab('manage') : undefined}
         onManage={canManage ? () => setTab('manage') : undefined}
         onReport={() => setCentralReportOpen(true)}
@@ -307,7 +319,15 @@ export function CommunityDetail({
         aria-label="Community sections"
       >
         {(
-          ['posts', 'chat', 'members', 'about', ...(canManage ? ['manage'] : [])] as CommunityTab[]
+          [
+            'home',
+            'post',
+            'chat',
+            'members',
+            'about',
+            ...(canManage ? ['manage'] : []),
+            ...(canAdmin ? ['settings'] : []),
+          ] as CommunityTab[]
         ).map((entry) => (
           <button
             key={entry}
@@ -321,18 +341,9 @@ export function CommunityDetail({
           </button>
         ))}
       </div>
-      {tab === 'posts' ? (
+      {tab === 'home' ? (
         <section className="space-y-5">
-          {item.isMember ? (
-            <Post
-              communityId={communityId}
-              communityName={item.name}
-              onNavigate={onNavigate}
-              onPublished={() =>
-                void queryClient.invalidateQueries({ queryKey: ['community-posts', communityId] })
-              }
-            />
-          ) : (
+          {item.isMember ? null : (
             <EmptyState
               title="Join to participate"
               description="Join this community to view and create community posts."
@@ -377,7 +388,57 @@ export function CommunityDetail({
               {posts.isFetchingNextPage ? 'Loading…' : 'Load more posts'}
             </Button>
           ) : null}
+          {item.isMember ? (
+            <Card className="space-y-4 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="type-display text-xl font-bold text-ink">Community discussions</h2>
+                <span className="text-xs font-semibold text-muted">
+                  Questions and shared context
+                </span>
+              </div>
+              {discussions.isLoading ? <LoadingState label="Loading discussions" /> : null}
+              {discussions.error ? (
+                <ErrorState
+                  message={apiErrorMessage(
+                    discussions.error,
+                    'Community discussions could not be loaded.',
+                  )}
+                  onRetry={() => void discussions.refetch()}
+                />
+              ) : null}
+              {!discussions.isLoading && !discussions.error && !discussionItems.length ? (
+                <p className="text-sm text-muted">No discussions have been started yet.</p>
+              ) : null}
+              <div className="grid gap-3">
+                {discussionItems.map((discussion) => (
+                  <DiscussionCard
+                    key={discussion.id}
+                    discussion={discussion}
+                    onOpen={() => onNavigate(`/discussions/${discussion.id}`)}
+                  />
+                ))}
+              </div>
+            </Card>
+          ) : null}
         </section>
+      ) : null}
+      {tab === 'post' ? (
+        item.isMember ? (
+          <Post
+            communityId={communityId}
+            communityName={item.name}
+            onNavigate={onNavigate}
+            onPublished={() => {
+              void queryClient.invalidateQueries({ queryKey: ['community-posts', communityId] });
+              setTab('home');
+            }}
+          />
+        ) : (
+          <EmptyState
+            title="Join to create a post"
+            description="Join this community before sharing a new post."
+          />
+        )
       ) : null}
       {tab === 'chat' ? <CommunicationHome communityId={communityId} /> : null}
       {tab === 'members' ? (
@@ -675,72 +736,6 @@ export function CommunityDetail({
               ))}
             </div>
           </Card>
-          <Card className="p-5 lg:col-span-2">
-            <h2 className="type-display text-lg font-bold text-ink">Community settings</h2>
-            <form
-              className="mt-4 grid gap-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                edit.mutate();
-              }}
-            >
-              <Field
-                label="Name"
-                value={editName}
-                onChange={(event) => setEditName(event.target.value)}
-              />
-              <TextareaField
-                label="Description"
-                value={editDescription}
-                onChange={(event) => setEditDescription(event.target.value)}
-              />
-              <Field
-                label="Category"
-                value={editCategory}
-                onChange={(event) => setEditCategory(event.target.value)}
-              />
-              <Field
-                label="Tags (comma separated)"
-                value={editTags}
-                onChange={(event) => setEditTags(event.target.value)}
-              />
-              <TextareaField
-                label="Rules (one per line)"
-                value={editRules}
-                onChange={(event) => setEditRules(event.target.value)}
-              />
-              <Field
-                label="Avatar image URL"
-                value={editAvatarUrl}
-                onChange={(event) => setEditAvatarUrl(event.target.value)}
-              />
-              <Field
-                label="Cover image URL"
-                value={editBannerUrl}
-                onChange={(event) => setEditBannerUrl(event.target.value)}
-              />
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="submit"
-                  disabled={edit.isPending || !editName.trim() || !editDescription.trim()}
-                >
-                  Save changes
-                </Button>
-                {canAdmin ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      if (window.confirm('Archive this community?')) remove.mutate();
-                    }}
-                    disabled={remove.isPending}
-                  >
-                    Archive community
-                  </Button>
-                ) : null}
-              </div>
-            </form>
-          </Card>
           {canAdmin ? (
             <Card className="p-5">
               <h2 className="type-display text-lg font-bold text-ink">Transfer ownership</h2>
@@ -804,6 +799,91 @@ export function CommunityDetail({
                 </div>
               ))}
             </div>
+          </Card>
+        </section>
+      ) : null}
+      {tab === 'settings' ? (
+        <section className="grid gap-5">
+          <Card className="p-5">
+            <h2 className="type-display text-lg font-bold text-ink">Community settings</h2>
+            <p className="mt-1 text-sm text-muted">
+              Keep the community details complete and current for everyone who discovers it.
+            </p>
+            <form
+              className="mt-4 grid gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                edit.mutate();
+              }}
+            >
+              <Field
+                label="Name"
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+              />
+              <TextareaField
+                label="Description"
+                value={editDescription}
+                onChange={(event) => setEditDescription(event.target.value)}
+              />
+              <Field
+                label="Category"
+                value={editCategory}
+                onChange={(event) => setEditCategory(event.target.value)}
+              />
+              <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
+                Visibility
+                <select
+                  value={editPrivacy}
+                  onChange={(event) =>
+                    setEditPrivacy(event.target.value as 'PUBLIC' | 'CAMPUS' | 'PRIVATE')
+                  }
+                  className="min-h-11 rounded-[10px] border border-line bg-white px-3.5 text-sm font-normal text-ink outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-100"
+                >
+                  <option value="PUBLIC">Public</option>
+                  <option value="CAMPUS">Campus</option>
+                  <option value="PRIVATE">Private</option>
+                </select>
+              </label>
+              <Field
+                label="Tags (comma separated)"
+                value={editTags}
+                onChange={(event) => setEditTags(event.target.value)}
+              />
+              <TextareaField
+                label="Rules (one per line)"
+                value={editRules}
+                onChange={(event) => setEditRules(event.target.value)}
+              />
+              <Field
+                label="Avatar image URL"
+                value={editAvatarUrl}
+                onChange={(event) => setEditAvatarUrl(event.target.value)}
+              />
+              <Field
+                label="Cover image URL"
+                value={editBannerUrl}
+                onChange={(event) => setEditBannerUrl(event.target.value)}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="submit"
+                  disabled={edit.isPending || !editName.trim() || !editDescription.trim()}
+                >
+                  Save changes
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    if (window.confirm('Archive this community?')) remove.mutate();
+                  }}
+                  disabled={remove.isPending}
+                >
+                  Archive community
+                </Button>
+              </div>
+            </form>
           </Card>
         </section>
       ) : null}

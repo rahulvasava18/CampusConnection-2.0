@@ -11,7 +11,7 @@ export function AuthRoutes() {
   useEffect(() => {
     const onPopState = () => setPath(window.location.pathname);
     window.addEventListener('popstate', onPopState);
-    if (!['/login', '/signup', '/verify-email', '/auth/google/callback', '/onboarding/username', '/admin/login'].includes(window.location.pathname)) {
+    if (!['/login', '/signup', '/verify-email', '/auth/google/callback', '/auth/google/password-recovery/callback', '/onboarding/username', '/admin/login'].includes(window.location.pathname)) {
       window.history.replaceState({}, '', '/login');
       setPath('/login');
     }

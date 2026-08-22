@@ -11,6 +11,9 @@ import { CreateProject } from '../pages/project/CreateProject';
 import { Projects } from '../pages/project/Projects';
 import { ProjectDetail } from '../pages/project/ProjectDetail';
 import { CreateEvent } from '../pages/event/CreateEvent';
+import { Clubs } from '../pages/club/Clubs';
+import { CreateClub } from '../pages/club/CreateClub';
+import { ClubDetail } from '../pages/club/ClubDetail';
 import { Events } from '../pages/event/Events';
 import { EventDetail } from '../pages/event/EventDetail';
 import { CreateDiscussion } from '../pages/community/CreateDiscussion';
@@ -42,6 +45,16 @@ export function AppRoutes({
       return <Search onNavigate={onNavigate} />;
     case 'communities':
       return <Community onNavigate={onNavigate} />;
+    case 'clubs':
+      return <Clubs onNavigate={onNavigate} />;
+    case 'clubCreate':
+      return <CreateClub onNavigate={onNavigate} />;
+    case 'clubEventCreate':
+      return <CreateEvent {...(window.location.pathname.split('/')[2] ? { clubId: window.location.pathname.split('/')[2] } : {})} onNavigate={onNavigate} />;
+    case 'clubDetail':
+      return <ClubDetail clubId={window.location.pathname.split('/')[2] ?? ''} onNavigate={onNavigate} />;
+    case 'clubManage':
+      return <ClubDetail clubId={window.location.pathname.split('/')[2] ?? ''} onNavigate={onNavigate} />;
     case 'communityCreate':
       return <CreateCommunity onNavigate={onNavigate} />;
     case 'teamCreate':
@@ -65,8 +78,6 @@ export function AppRoutes({
           onNavigate={onNavigate}
         />
       );
-    case 'eventCreate':
-      return <CreateEvent onNavigate={onNavigate} />;
     case 'eventDetail':
       return (
         <EventDetail

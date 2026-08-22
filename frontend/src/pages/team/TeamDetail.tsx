@@ -35,7 +35,7 @@ import {
 import { search } from '../../features/discovery/discovery.api';
 import { AdminReportDialog } from '../admin/AdminReportDialog';
 
-type TeamTab = 'overview' | 'chat' | 'members' | 'manage';
+type TeamTab = 'overview' | 'chat' | 'members' | 'manage' | 'settings';
 
 function TeamInvitationPreview({
   preview,
@@ -164,6 +164,12 @@ export function TeamDetail({
   const [editDescription, setEditDescription] = useState('');
   const [editGoal, setEditGoal] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  const [editTags, setEditTags] = useState('');
+  const [editLookingFor, setEditLookingFor] = useState('');
+  const [editDeadline, setEditDeadline] = useState('');
+  const [editAvatarUrl, setEditAvatarUrl] = useState('');
+  const [editMaxMembers, setEditMaxMembers] = useState('');
+  const [editVisibility, setEditVisibility] = useState('');
   const preview = useQuery({
     queryKey: ['team-invitation-preview', teamId],
     queryFn: () => getTeamInvitationPreview(teamId),
@@ -187,7 +193,8 @@ export function TeamDetail({
   const requests = useQuery({
     queryKey: ['team-requests', teamId],
     queryFn: () => getTeamJoinRequests(teamId),
-    enabled: tab === 'manage',
+    enabled:
+      tab === 'manage' && ['OWNER', 'CO_LEAD'].includes(team.data?.membershipRole ?? ''),
   });
   const invitations = useQuery({ queryKey: ['team-invitations'], queryFn: getTeamInvitations });
   const refresh = () => {
@@ -238,8 +245,22 @@ export function TeamDetail({
       updateTeam(teamId, {
         name: editName.trim() || item.name,
         description: editDescription.trim() || item.description,
-        goal: editGoal.trim() || item.goal || 'Team collaboration goal',
+        goal: editGoal.trim() || item.goal || '',
         category: editCategory.trim() || item.category || 'Project',
+        tags: (editTags || item.tags?.join(',') || '')
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
+        lookingFor: (editLookingFor || item.lookingFor?.join(',') || '')
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
+        ...(editDeadline.trim()
+          ? { deadline: new Date(`${editDeadline}T23:59:59.000Z`).toISOString() }
+          : {}),
+        ...(editAvatarUrl.trim() ? { avatarUrl: editAvatarUrl.trim() } : {}),
+        ...(editMaxMembers.trim() ? { maxMembers: Number(editMaxMembers) } : {}),
+        visibility: editVisibility || item.visibility,
       }),
     onSuccess: refresh,
   });
@@ -283,6 +304,94 @@ export function TeamDetail({
     complete.error ??
     archive.error;
 
+  if (!item.isMember) {
+    return (
+      <section className="page-theme page-theme-teams space-y-5">
+        <Card className="overflow-hidden">
+          <div className="bg-brand-800 px-5 py-7 text-white sm:px-8">
+            <button
+              type="button"
+              onClick={() => onNavigate('/teams')}
+              className="mb-7 text-sm font-semibold text-white/80 hover:text-white"
+            >
+              ← Teams
+            </button>
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge tone="brand">{item.category ?? 'Team'}</Badge>
+                  <Badge tone="neutral">{item.visibility}</Badge>
+                  <Badge tone="neutral">Public details</Badge>
+                </div>
+                <h1 className="type-display mt-3 text-3xl font-bold">{item.name}</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-white/80">
+                  {item.description || 'A campus team looking for collaborators.'}
+                </p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setReportOpen(true)}>
+                Report
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-6 p-5 sm:p-8">
+            <div className="grid gap-4 border-b border-line pb-5 sm:grid-cols-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Members</p>
+                <p className="mt-1 text-sm font-semibold text-ink">
+                  {item.memberCount ?? 0}
+                  {item.maxMembers ? ` / ${item.maxMembers}` : ''}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Status</p>
+                <p className="mt-1 text-sm font-semibold text-ink">{item.status}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Deadline</p>
+                <p className="mt-1 text-sm font-semibold text-ink">
+                  {item.deadline ? new Date(item.deadline).toLocaleDateString() : 'Open-ended'}
+                </p>
+              </div>
+            </div>
+            {item.goal ? (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Goal</p>
+                <p className="mt-2 text-sm leading-7 text-slate-700">{item.goal}</p>
+              </div>
+            ) : null}
+            {item.tags?.length ? (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Tags</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {item.tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}
+                </div>
+              </div>
+            ) : null}
+            {item.membershipStatus === 'PENDING' ? (
+              <Button variant="secondary" disabled>
+                Requested
+              </Button>
+            ) : item.visibility === 'PRIVATE' ? (
+              <p className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-muted">
+                This private team is invitation-only. The owner or a collaborator can invite you.
+              </p>
+            ) : item.status === 'RECRUITING' || item.status === 'ACTIVE' ? (
+              <Button onClick={() => membership.mutate(false)} disabled={membership.isPending}>
+                {membership.isPending ? 'Requesting…' : 'Join team'}
+              </Button>
+            ) : null}
+          </div>
+        </Card>
+        <AdminReportDialog
+          open={reportOpen}
+          targetType="TEAM"
+          targetId={teamId}
+          onClose={() => setReportOpen(false)}
+        />
+      </section>
+    );
+  }
+
   return (
     <div className="page-theme page-theme-teams space-y-5">
       <Card className="overflow-hidden">
@@ -308,7 +417,7 @@ export function TeamDetail({
               <Button size="sm" variant="ghost" onClick={() => setReportOpen(true)}>Report</Button>
               {item.membershipStatus === 'PENDING' ? (
                 <Button size="sm" variant="secondary" disabled>
-                  Request pending
+                  Requested
                 </Button>
               ) : item.isMember ? (
                 <Button
@@ -327,14 +436,14 @@ export function TeamDetail({
                 <Button size="sm" variant="secondary" disabled>
                   Team full
                 </Button>
-              ) : (
+              ) : item.visibility === 'PRIVATE' ? null : (
                 <Button
                   size="sm"
                   variant="secondary"
                   onClick={() => membership.mutate(false)}
                   disabled={membership.isPending}
                 >
-                  {item.visibility === 'PRIVATE' ? 'Request to join' : 'Join team'}
+                  Join team
                 </Button>
               )}
               {isManager ? (
@@ -368,8 +477,15 @@ export function TeamDetail({
         role="tablist"
         aria-label="Team sections"
       >
-        {(['overview', 'chat', 'members', ...(isManager ? ['manage'] : [])] as TeamTab[]).map(
-          (entry) => (
+        {(
+          [
+            'overview',
+            'chat',
+            'members',
+            ...(isManager ? ['manage'] : []),
+            ...(isOwner ? ['settings'] : []),
+          ] as TeamTab[]
+        ).map((entry) => (
             <button
               key={entry}
               type="button"
@@ -380,8 +496,7 @@ export function TeamDetail({
             >
               {entry}
             </button>
-          ),
-        )}
+        ))}
       </div>
       {tab === 'overview' ? (
         <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -624,69 +739,6 @@ export function TeamDetail({
               ))}
             </div>
           </Card>
-          <Card className="p-5 lg:col-span-2">
-            <h2 className="type-display text-lg font-bold text-ink">Team settings</h2>
-            <form
-              className="mt-4 grid gap-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                edit.mutate();
-              }}
-            >
-              <Field
-                label="Name"
-                value={editName || item.name}
-                onChange={(event) => setEditName(event.target.value)}
-              />
-              <TextareaField
-                label="Description"
-                value={editDescription || item.description}
-                onChange={(event) => setEditDescription(event.target.value)}
-              />
-              <TextareaField
-                label="Goal"
-                value={editGoal || (item.goal ?? '')}
-                onChange={(event) => setEditGoal(event.target.value)}
-              />
-              <Field
-                label="Category"
-                value={editCategory || (item.category ?? '')}
-                onChange={(event) => setEditCategory(event.target.value)}
-              />
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={edit.isPending}>
-                  Save changes
-                </Button>
-                {isOwner ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      if (window.confirm('Mark this team as completed?')) complete.mutate();
-                    }}
-                    disabled={
-                      complete.isPending ||
-                      (item.status !== 'ACTIVE' && item.status !== 'RECRUITING')
-                    }
-                  >
-                    Complete team
-                  </Button>
-                ) : null}
-                {isOwner ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => {
-                      if (window.confirm('Archive this team?')) archive.mutate();
-                    }}
-                    disabled={archive.isPending}
-                  >
-                    Archive team
-                  </Button>
-                ) : null}
-              </div>
-            </form>
-          </Card>
           {isOwner ? (
             <Card className="p-5">
               <h2 className="type-display text-lg font-bold text-ink">Transfer ownership</h2>
@@ -752,6 +804,124 @@ export function TeamDetail({
                 </div>
               ))}
             </div>
+          </Card>
+        </section>
+      ) : null}
+      {tab === 'settings' ? (
+        <section className="grid gap-5">
+          <Card className="p-5 lg:p-7">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-muted">Settings</p>
+              <h2 className="type-display mt-1 text-xl font-bold text-ink">Team information</h2>
+              <p className="mt-1 text-sm text-muted">
+                Update the details people use to understand and discover this team.
+              </p>
+            </div>
+            <form
+              className="mt-5 grid gap-4 sm:grid-cols-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                edit.mutate();
+              }}
+            >
+              <Field
+                label="Name"
+                value={editName || item.name}
+                onChange={(event) => setEditName(event.target.value)}
+              />
+              <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
+                Category
+                <input
+                  value={editCategory || item.category || ''}
+                  onChange={(event) => setEditCategory(event.target.value)}
+                  className="min-h-11 rounded-[10px] border border-line bg-white px-3.5 text-sm font-normal text-ink outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-100"
+                />
+              </label>
+              <TextareaField
+                label="Description"
+                className="sm:col-span-2"
+                value={editDescription || item.description}
+                onChange={(event) => setEditDescription(event.target.value)}
+              />
+              <TextareaField
+                label="Goal"
+                className="sm:col-span-2"
+                value={editGoal || (item.goal ?? '')}
+                onChange={(event) => setEditGoal(event.target.value)}
+              />
+              <Field
+                label="Tags (comma separated)"
+                value={editTags || item.tags?.join(', ') || ''}
+                onChange={(event) => setEditTags(event.target.value)}
+                placeholder="React, AI, design"
+              />
+              <Field
+                label="Looking for (comma separated)"
+                value={editLookingFor || item.lookingFor?.join(', ') || ''}
+                onChange={(event) => setEditLookingFor(event.target.value)}
+                placeholder="Designer, backend developer"
+              />
+              <Field
+                label="Deadline"
+                type="date"
+                value={editDeadline || (item.deadline ? item.deadline.slice(0, 10) : '')}
+                onChange={(event) => setEditDeadline(event.target.value)}
+              />
+              <Field
+                label="Avatar image URL"
+                value={editAvatarUrl || item.avatarUrl || ''}
+                onChange={(event) => setEditAvatarUrl(event.target.value)}
+                placeholder="https://..."
+              />
+              <Field
+                label="Maximum members"
+                type="number"
+                min={1}
+                max={100}
+                value={editMaxMembers || (item.maxMembers ? String(item.maxMembers) : '')}
+                onChange={(event) => setEditMaxMembers(event.target.value)}
+              />
+              <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
+                Visibility
+                <select
+                  value={editVisibility || item.visibility}
+                  onChange={(event) => setEditVisibility(event.target.value)}
+                  className="min-h-11 rounded-[10px] border border-line bg-white px-3.5 text-sm font-normal text-ink outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-100"
+                >
+                  <option value="PUBLIC">Public</option>
+                  <option value="CAMPUS">Campus</option>
+                  <option value="PRIVATE">Private</option>
+                </select>
+              </label>
+              <div className="flex flex-wrap gap-2 sm:col-span-2">
+                <Button type="submit" disabled={edit.isPending}>
+                  {edit.isPending ? 'Saving…' : 'Save settings'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    if (window.confirm('Mark this team as completed?')) complete.mutate();
+                  }}
+                  disabled={
+                    complete.isPending ||
+                    (item.status !== 'ACTIVE' && item.status !== 'RECRUITING')
+                  }
+                >
+                  Complete team
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    if (window.confirm('Archive this team?')) archive.mutate();
+                  }}
+                  disabled={archive.isPending}
+                >
+                  Archive team
+                </Button>
+              </div>
+            </form>
           </Card>
         </section>
       ) : null}

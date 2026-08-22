@@ -18,7 +18,7 @@ import { getAdminNotifications } from '../../features/admin/admin.api';
 
 const navigationGroups = [
   { label: 'Overview', items: [{ label: 'Dashboard', icon: LayoutDashboard, path: '/admin' }, { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' }] },
-  { label: 'Management', items: [{ label: 'Users', icon: Users, path: '/admin/users' }, { label: 'Posts', icon: FileText, path: '/admin/posts' }, { label: 'Comments', icon: FileText, path: '/admin/comments' }, { label: 'Teams', icon: Users, path: '/admin/teams' }, { label: 'Communities', icon: Users, path: '/admin/communities' }, { label: 'Events', icon: Activity, path: '/admin/events' }] },
+  { label: 'Management', items: [{ label: 'Users', icon: Users, path: '/admin/users' }, { label: 'Posts', icon: FileText, path: '/admin/posts' }, { label: 'Comments', icon: FileText, path: '/admin/comments' }, { label: 'Teams', icon: Users, path: '/admin/teams' }, { label: 'Communities', icon: Users, path: '/admin/communities' }, { label: 'Clubs', icon: Users, path: '/admin/clubs' }, { label: 'Events', icon: Activity, path: '/admin/events' }] },
   { label: 'Safety', items: [{ label: 'Reports', icon: ShieldAlert, path: '/admin/reports' }, { label: 'Moderation', icon: ShieldAlert, path: '/admin/moderation' }] },
   { label: 'System', items: [{ label: 'Notifications', icon: Bell, path: '/admin/notifications' }, { label: 'Audit logs', icon: Activity, path: '/admin/audit-logs' }, { label: 'Settings', icon: BarChart3, path: '/admin/settings' }] },
 ];

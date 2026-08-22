@@ -100,7 +100,13 @@ export function createCollaborationRouter(service = new CollaborationService()):
     '/events',
     requireCsrf,
     validateRequest(eventCreate, 'body'),
-    handle((req) => service.createEvent(actor(req), req.body, req.correlationId), 201),
+    handle(async () => {
+      throw new AppError(
+        'CLUB_REQUIRED',
+        'Official events must be created from an approved club by an owner or secretary.',
+        403,
+      );
+    }, 403),
   );
   router.get(
     '/events/:eventId',

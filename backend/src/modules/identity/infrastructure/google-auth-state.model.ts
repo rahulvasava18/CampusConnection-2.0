@@ -1,10 +1,15 @@
-import { Schema, model, type Document, type Model, type ClientSession } from 'mongoose';
+import { Schema, model, type Document, type Model, type ClientSession, type Types } from 'mongoose';
 
 export type GoogleAuthStateStatus = 'STARTED' | 'READY' | 'ONBOARDING' | 'CONSUMED';
+export type GoogleAuthPurpose = 'SIGN_IN' | 'PASSWORD_RECOVERY';
 
 export interface GoogleAuthStateDocument extends Document {
   stateHash: string;
   nonce: string;
+  purpose: GoogleAuthPurpose;
+  userId?: Types.ObjectId;
+  sessionId?: string;
+  familyId?: string;
   handoffTokenHash?: string;
   onboardingTokenHash?: string;
   status: GoogleAuthStateStatus;
@@ -20,6 +25,10 @@ const schema = new Schema<GoogleAuthStateDocument>(
   {
     stateHash: { type: String, required: true, unique: true, index: true },
     nonce: { type: String, required: true },
+    purpose: { type: String, enum: ['SIGN_IN', 'PASSWORD_RECOVERY'], default: 'SIGN_IN' },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    sessionId: { type: String },
+    familyId: { type: String },
     handoffTokenHash: { type: String, unique: true, sparse: true, index: true },
     onboardingTokenHash: { type: String, unique: true, sparse: true, index: true },
     status: {
@@ -45,7 +54,10 @@ export const GoogleAuthStateModel: Model<GoogleAuthStateDocument> = model(
 
 export class GoogleAuthStateRepository {
   public create(
-    input: Pick<GoogleAuthStateDocument, 'stateHash' | 'nonce' | 'status' | 'expiresAt'>,
+    input: Pick<
+      GoogleAuthStateDocument,
+      'stateHash' | 'nonce' | 'purpose' | 'userId' | 'sessionId' | 'familyId' | 'status' | 'expiresAt'
+    >,
   ): Promise<GoogleAuthStateDocument> {
     return GoogleAuthStateModel.create(input);
   }

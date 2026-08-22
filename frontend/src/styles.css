@@ -334,6 +334,23 @@
     --color-line-strong: #e6c0b2;
   }
 
+  .page-theme-clubs {
+    --page-surface: #f7fcf8;
+    --color-brand-50: #edf9f1;
+    --color-brand-100: #d9f0df;
+    --color-brand-200: #b9dfc4;
+    --color-brand-300: #91cda2;
+    --color-brand-400: #6fba86;
+    --color-brand-500: #4fa36c;
+    --color-brand-600: #3c8959;
+    --color-brand-700: #2f704a;
+    --color-brand-800: #285b3e;
+    --color-brand-900: #204a34;
+    --color-cyan: #6fba86;
+    --color-line: #d9e9dc;
+    --color-line-strong: #bfd7c4;
+  }
+
   .page-theme-resources {
     --page-surface: #fbfcf7;
     --color-brand-50: #f0f1c5;
@@ -711,6 +728,7 @@
 :root[data-theme='dark'] .theme-directory-card,
 :root[data-theme='dark'] .theme-project-card,
 :root[data-theme='dark'] .theme-event-card,
+:root[data-theme='dark'] .theme-club-card,
 :root[data-theme='dark'] .theme-discovery-card,
 :root[data-theme='dark'] .theme-intelligence-card {
   background: var(--surface-elevated) !important;

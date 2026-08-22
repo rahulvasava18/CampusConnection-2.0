@@ -58,4 +58,26 @@ describe('password identity API', () => {
     expect(response.body.data.csrfToken).toBe('session-csrf-token');
     expect(cookies.some((cookie) => cookie?.includes('cc_csrf='))).toBe(true);
   });
+
+  it('exchanges Google password recovery only into an HttpOnly reset cookie', async () => {
+    const authService = {
+      exchangePasswordRecoveryGoogleCode: async () => ({
+        verified: true as const,
+        resetToken: 'one-time-reset-token',
+      }),
+    } as unknown as AuthService;
+    const googleApp = createApp({ authService });
+
+    const response = await request(googleApp)
+      .post('/api/auth/google/password-recovery/exchange')
+      .send({ code: 'recovery-handoff-token-123456789012345678901234' });
+    const setCookie = response.headers['set-cookie'];
+    const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({ verified: true });
+    expect(cookies.some((cookie) => cookie?.includes('cc_password_reset='))).toBe(true);
+    expect(cookies.some((cookie) => cookie?.includes('HttpOnly'))).toBe(true);
+    expect(response.body.data.resetToken).toBeUndefined();
+  });
 });

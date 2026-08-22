@@ -7,7 +7,7 @@ import { apiErrorMessage, collectionItems, isRestrictedApiError } from '../../li
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState } from '../../components/ui';
 import { CompactPageHeader, CompactPageTop } from '../../components/PageHeader';
 
-function EventCard({ event, onOpen }: { event: EventView; onOpen: () => void }) {
+function EventCard({ event, onOpen, onNavigate }: { event: EventView; onOpen: () => void; onNavigate: (target: string) => void }) {
   return (
     <Card className="theme-event-card overflow-hidden p-0 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md">
       {event.coverImageUrl ? (
@@ -35,6 +35,15 @@ function EventCard({ event, onOpen }: { event: EventView; onOpen: () => void }) 
         <div>
           <h2 className="type-display text-xl font-bold text-ink">{event.title}</h2>
           <p className="mt-1 text-sm font-semibold text-brand-700">{event.category}</p>
+          {event.organizerClub ? (
+            <button
+              type="button"
+              className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:text-brand-900"
+              onClick={() => onNavigate(`/clubs/${event.organizerClub?.id}`)}
+            >
+              Organized by {event.organizerClub.name} ✓
+            </button>
+          ) : null}
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted">{event.description}</p>
         </div>
         <div className="space-y-2 text-xs font-semibold text-muted">
@@ -183,7 +192,7 @@ export function Events({ onNavigate }: { onNavigate: (target: string) => void })
             eyebrow="Workspace / Events"
             title="Make time for campus life."
             description="Discover hackathons, workshops, talks, competitions, and meetups."
-            action={<Button onClick={() => onNavigate('/events/create')}>Create event</Button>}
+            action={<span className="text-sm font-semibold text-muted">Discover verified club events</span>}
           />
         }
       />
@@ -199,8 +208,7 @@ export function Events({ onNavigate }: { onNavigate: (target: string) => void })
       {!events.isLoading && !events.error && !items.length ? (
         <EmptyState
           title="No events found"
-          description="Try another filter or create the first event for your campus."
-          action={<Button onClick={() => onNavigate('/events/create')}>Create event</Button>}
+            description="Try another filter or open a verified club to see its upcoming events."
         />
       ) : null}
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -209,6 +217,7 @@ export function Events({ onNavigate }: { onNavigate: (target: string) => void })
             key={event.id}
             event={event}
             onOpen={() => onNavigate(`/events/${event.id}`)}
+            onNavigate={onNavigate}
           />
         ))}
       </div>

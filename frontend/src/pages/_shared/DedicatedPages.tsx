@@ -20,7 +20,7 @@ import { CommunicationHome } from '../../features/communication/CommunicationHom
 import { DiscoveryHome } from '../../features/discovery/DiscoveryHome';
 import { IntelligenceHome } from '../../features/intelligence/IntelligenceHome';
 import { getProjects, getTeams } from '../../features/collaboration/collaboration.api';
-import { CompactPageHeader, PageHeader } from '../../components/PageHeader';
+import { PageHeader } from '../../components/PageHeader';
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, cn } from '../../components/ui';
 import { apiErrorMessage, collectionItems, isRestrictedApiError } from '../../lib/api-state';
 import type { useAuthStore } from '../../features/auth/auth.store';
@@ -84,18 +84,8 @@ export function ExplorePage() {
 
 export function MessagesPage({ onNavigate }: { onNavigate?: (target: string) => void } = {}) {
   return (
-    <div className="page-theme page-theme-messages space-y-7">
-      <CommunicationHome
-        {...(onNavigate ? { onNavigate } : {})}
-        compactHeader={
-          <CompactPageHeader
-            eyebrow="Messages / Realtime"
-            title="Messages that move ideas forward."
-            description="Stay close to your campus conversations in real time."
-            action={<Badge tone="success">Realtime</Badge>}
-          />
-        }
-      />
+    <div className="page-theme page-theme-messages">
+      <CommunicationHome {...(onNavigate ? { onNavigate } : {})} />
     </div>
   );
 }

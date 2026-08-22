@@ -28,6 +28,23 @@ describe('project feature boundaries', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts the minimal project creation contract and supplies optional defaults', () => {
+    const result = projectCreate.safeParse({
+      name: 'Campus Builders',
+      category: 'Technology',
+      visibility: 'PUBLIC',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.slug).toBeUndefined();
+      expect(result.data.description).toBe('');
+      expect(result.data.objective).toBe('');
+      expect(result.data.tags).toEqual([]);
+      expect(result.data.lookingFor).toEqual([]);
+      expect(result.data.technologies).toEqual([]);
+    }
+  });
+
   it('accepts project discovery and membership workflow inputs', () => {
     expect(
       projectListQuery.safeParse({ limit: '20', search: 'campus', status: 'ACTIVE' }).success,

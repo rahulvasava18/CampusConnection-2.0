@@ -55,6 +55,7 @@ export async function apiRequest<T>(
     '/auth/login',
     '/auth/signup',
     '/auth/google/exchange',
+    '/auth/google/password-recovery/exchange',
     '/auth/google/onboarding',
     '/auth/google/onboarding/username-availability',
     '/auth/verify-email',

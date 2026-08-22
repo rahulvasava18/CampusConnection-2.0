@@ -14,6 +14,7 @@ import {
   updateEvent,
   updateEventRegistration,
 } from '../../features/collaboration/collaboration.api';
+import { getClub } from '../../features/club/club.api';
 import {
   Avatar,
   Badge,
@@ -45,10 +46,16 @@ export function EventDetail({
   const event = useQuery({ queryKey: ['event', eventId], queryFn: () => getEvent(eventId) });
   const item = event.data;
   const isOrganizer = Boolean(item && userId === item.organizerId);
+  const organizerClub = useQuery({
+    queryKey: ['club', item?.organizerClubId],
+    queryFn: () => getClub(item!.organizerClubId!),
+    enabled: Boolean(item?.organizerClubId),
+  });
+  const canManageEvent = isOrganizer || organizerClub.data?.membershipRole === 'OWNER' || organizerClub.data?.membershipRole === 'SECRETARY';
   const registrations = useQuery({
     queryKey: ['event-registrations', eventId],
     queryFn: () => getEventRegistrations(eventId),
-    enabled: isOrganizer,
+    enabled: canManageEvent,
   });
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ['event', eventId] });
@@ -92,8 +99,7 @@ export function EventDetail({
         }
       />
     );
-  const isRegistered =
-    item.registrationStatus === 'REGISTERED' || item.registrationStatus === 'ATTENDED';
+  const isRegistered = item.registrationStatus === 'REGISTERED' || item.registrationStatus === 'ATTENDED';
   const full = item.capacity !== undefined && (item.availableSeats ?? 0) <= 0;
   const closed = item.registrationDeadline
     ? new Date(item.registrationDeadline) <= new Date()
@@ -147,7 +153,7 @@ export function EventDetail({
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="ghost" onClick={() => setReportOpen(true)}>Report</Button>
-              {isOrganizer ? (
+              {canManageEvent ? (
                 <Button
                   variant="secondary"
                   onClick={() =>
@@ -164,19 +170,19 @@ export function EventDetail({
               ) : item.status === 'COMPLETED' ? (
                 <Button disabled>Event completed</Button>
               ) : !item.registrationRequired ? (
-                <Button disabled>Registration not required</Button>
-              ) : isRegistered ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => cancelRegistration.mutate()}
-                  disabled={cancelRegistration.isPending || item.registrationStatus === 'ATTENDED'}
-                >
-                  {item.registrationStatus === 'ATTENDED' ? 'Attended ✓' : 'Registered ✓ · Cancel'}
-                </Button>
+                <Button disabled>No registration required</Button>
               ) : full ? (
                 <Button disabled>Event full</Button>
               ) : closed ? (
                 <Button disabled>Registration closed</Button>
+              ) : item.registrationUrl ? (
+                <a className="type-ui inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:-translate-y-px hover:bg-brand-600" href={item.registrationUrl} target="_blank" rel="noreferrer">
+                  Register <ExternalLink className="h-4 w-4" />
+                </a>
+              ) : isRegistered ? (
+                <Button variant="secondary" onClick={() => cancelRegistration.mutate()} disabled={cancelRegistration.isPending || item.registrationStatus === 'ATTENDED'}>
+                  {item.registrationStatus === 'ATTENDED' ? 'Attended ✓' : 'Registered ✓ · Cancel'}
+                </Button>
               ) : (
                 <Button onClick={() => register.mutate()} disabled={register.isPending}>
                   {register.isPending ? 'Registering...' : 'Register'}
@@ -219,11 +225,21 @@ export function EventDetail({
                 : `${item.registrationCount} registered`}
             </p>
             <p>
-              Organizer
+              {organizerClub.data ? 'Organized by' : 'Organizer'}
               <br />
-              <strong className="text-ink">
-                {item.organizer?.displayName ?? 'Campus organizer'}
-              </strong>
+              {organizerClub.data ? (
+                <button
+                  type="button"
+                  className="font-semibold text-brand-700 hover:text-brand-900"
+                  onClick={() => onNavigate(`/clubs/${organizerClub.data?.id}`)}
+                >
+                  {organizerClub.data.name} ✓
+                </button>
+              ) : (
+                <strong className="text-ink">
+                  {item.organizer?.displayName ?? 'Campus organizer'}
+                </strong>
+              )}
             </p>
           </div>
           {item.registrationDeadline ? (
@@ -285,7 +301,7 @@ export function EventDetail({
           )}
         </Card>
       </section>
-      {isOrganizer ? (
+      {canManageEvent ? (
         <section id="event-manage" className="grid gap-5 lg:grid-cols-2">
           <Card className="p-5">
             <h2 className="type-display text-xl font-bold text-ink">Manage event</h2>

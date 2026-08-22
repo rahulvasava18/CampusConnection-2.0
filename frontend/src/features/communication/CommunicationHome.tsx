@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Check,
@@ -126,12 +126,10 @@ export function CommunicationHome({
   communityId,
   teamId,
   onNavigate,
-  compactHeader,
 }: {
   communityId?: string;
   teamId?: string;
   onNavigate?: (target: string) => void;
-  compactHeader?: ReactNode;
 } = {}) {
   const token = useAuthStore((state) => state.accessToken);
   const user = useAuthStore((state) => state.user);
@@ -439,7 +437,7 @@ export function CommunicationHome({
   const people = peopleSearch.data?.data ?? [];
 
   return (
-    <section className="page-theme page-theme-messages space-y-5">
+    <section className="page-theme page-theme-messages flex min-h-[calc(100vh-8.5rem)] flex-col gap-5">
       {communityId && !scopedConversationItems.length ? (
         <Card className="p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
@@ -466,55 +464,6 @@ export function CommunicationHome({
           </div>
         </Card>
       ) : null}
-      {!communityId && !teamId ? (
-        <div className={compactHeader ? 'grid items-stretch gap-4 md:grid-cols-[minmax(0,2.4fr)_minmax(240px,1fr)]' : undefined}>
-          <div className={compactHeader ? 'min-w-0 [&>*]:h-full' : undefined}>
-        <Card className="p-4 sm:p-5">
-          <div className="flex flex-col gap-3">
-            <Field
-              className="w-full"
-              label="Find someone to message"
-              aria-label="Search people"
-              value={peopleQuery}
-              onChange={(event) => setPeopleQuery(event.target.value)}
-              placeholder="Search by display name or username"
-            />
-            {peopleQuery.trim().length < 2 ? (
-              <p className="text-xs text-muted">Type at least two characters to find a person.</p>
-            ) : null}
-            {peopleSearch.isFetching ? <LoadingState label="Searching people" /> : null}
-            {peopleSearch.error ? (
-              <p className="text-sm text-red-600">{apiErrorMessage(peopleSearch.error, 'People search is unavailable.')}</p>
-            ) : null}
-            {directConversation.error ? (
-              <p className="text-sm text-red-600">
-                {apiErrorMessage(directConversation.error, 'Unable to start conversation. Please try again.')}
-              </p>
-            ) : null}
-            {peopleQuery.trim().length >= 2 && !peopleSearch.isFetching && !peopleSearch.error && !people.length ? (
-              <p className="text-sm text-muted">No matching people found.</p>
-            ) : null}
-            <div className="grid gap-2">
-              {people.map((result) => (
-                <div className="flex items-center gap-3 rounded-xl border border-line px-3 py-2.5" key={`${result.type}-${result.id}`}>
-                  <Avatar name={result.title} src={result.imageUrl} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <strong className="block truncate text-sm text-ink">{result.title}</strong>
-                    <span className="text-xs text-muted">{resultUsername(result) ?? 'Campus member'}</span>
-                  </div>
-                  <Button size="sm" onClick={() => directConversation.mutate(result.id)} disabled={!realtimeAllowed || directConversation.isPending}>
-                    <MessageCircle className="h-4 w-4" />
-                    Message
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-          </div>
-          {compactHeader ? <div className="min-w-0">{compactHeader}</div> : null}
-        </div>
-      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">Inbox</p>
@@ -531,8 +480,8 @@ export function CommunicationHome({
         </div>
       </div>
       {realtimeError && realtimeAllowed ? <ErrorState message={`Realtime connection unavailable: ${realtimeError}`} /> : null}
-      <div className="grid gap-4 lg:grid-cols-[21rem_1fr]">
-        <Card className={cn('min-h-[34rem] overflow-hidden p-3', selectedId && 'hidden lg:block')}>
+      <div className="grid min-h-[32rem] flex-1 gap-4 lg:h-[calc(100vh-15rem)] lg:max-h-[44rem] lg:grid-cols-[21rem_1fr]">
+        <Card className={cn('flex min-h-0 flex-col overflow-hidden p-3', selectedId && 'hidden lg:flex')}>
           <div className="flex items-center justify-between px-2 pb-3">
             <div>
               <h3 className="font-display font-bold text-ink">Conversations</h3>
@@ -540,6 +489,36 @@ export function CommunicationHome({
             </div>
             <Badge tone="neutral">{scopedConversationItems.filter((item) => item.unreadCount).length} unread</Badge>
           </div>
+          {!communityId && !teamId ? (
+            <div className="mb-3 rounded-xl border border-line bg-[var(--surface-secondary)] p-3">
+              <Field
+                label="New message"
+                aria-label="Search people"
+                value={peopleQuery}
+                onChange={(event) => setPeopleQuery(event.target.value)}
+                placeholder="Search by name or username"
+              />
+              {peopleSearch.isFetching ? <LoadingState label="Searching people" /> : null}
+              {peopleSearch.error ? <p className="mt-2 text-xs text-red-600">{apiErrorMessage(peopleSearch.error, 'People search is unavailable.')}</p> : null}
+              {directConversation.error ? <p className="mt-2 text-xs text-red-600">{apiErrorMessage(directConversation.error, 'Unable to start conversation.')}</p> : null}
+              {peopleQuery.trim().length >= 2 && !peopleSearch.isFetching && !peopleSearch.error && !people.length ? <p className="mt-2 text-xs text-muted">No matching people found.</p> : null}
+              <div className="mt-2 grid gap-2">
+                {people.map((result) => (
+                  <div className="flex items-center gap-2 rounded-lg border border-line bg-[var(--surface-elevated)] px-2 py-2" key={`${result.type}-${result.id}`}>
+                    <Avatar name={result.title} src={result.imageUrl} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <strong className="block truncate text-xs text-ink">{result.title}</strong>
+                      <span className="block truncate text-[11px] text-muted">{resultUsername(result) ?? 'Campus member'}</span>
+                    </div>
+                    <Button size="sm" onClick={() => directConversation.mutate(result.id)} disabled={!realtimeAllowed || directConversation.isPending}>
+                      <MessageCircle className="h-3.5 w-3.5" />
+                      Message
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <label className="relative mb-3 block px-1">
             <span className="sr-only">Search conversations</span>
             <Search className="pointer-events-none absolute left-4 top-3 h-4 w-4 text-slate-400" />
@@ -578,7 +557,7 @@ export function CommunicationHome({
               description={scopedConversationItems.length ? 'Try a different search or filter.' : 'Search for a student above to start a conversation.'}
             />
           ) : null}
-          <div className="grid gap-1">
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
             {conversationItems.map((item) => {
               const isSelected = item.id === selectedId;
               const peerPresence = item.peer ? presence[item.peer.userId]?.state : undefined;
@@ -616,7 +595,7 @@ export function CommunicationHome({
             })}
           </div>
         </Card>
-        <Card className={cn('flex min-h-[34rem] flex-col overflow-hidden', !selectedId && 'hidden lg:flex')}>
+        <Card className={cn('flex min-h-0 flex-col overflow-hidden', !selectedId && 'hidden lg:flex')}>
           {selected ? (
             <>
               <div className="flex flex-wrap items-center gap-3 border-b border-line bg-white px-4 py-4 sm:px-5">
@@ -651,7 +630,7 @@ export function CommunicationHome({
               </div>
               <div
                 ref={messageListRef}
-                className="flex-1 overflow-auto bg-slate-50/70 p-4 sm:p-5"
+                className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 sm:p-5"
                 onScroll={(event) => {
                   if (event.currentTarget.scrollTop < 40) loadOlder();
                 }}
@@ -674,8 +653,8 @@ export function CommunicationHome({
                         {showDate ? <div className="flex items-center gap-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400"><span className="h-px flex-1 bg-line" />{messageDateLabel(message.createdAt)}<span className="h-px flex-1 bg-line" /></div> : null}
                         <article
                           className={cn(
-                            'group relative max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm',
-                            mine ? 'ml-auto bg-brand-600 text-white' : 'bg-white text-slate-700',
+                            'group relative w-fit max-w-[min(85%,34rem)] rounded-[1.25rem] px-4 py-3 text-sm shadow-sm',
+                            mine ? 'ml-auto rounded-br-md bg-brand-600 text-white' : 'rounded-bl-md bg-white text-slate-700',
                             isPending && 'opacity-60',
                             deleted && 'italic text-slate-400',
                           )}
@@ -747,7 +726,15 @@ export function CommunicationHome({
               </div>
             </>
           ) : (
-            <div className="grid flex-1 place-items-center p-8"><EmptyState title="Choose a conversation" description="Select an inbox thread to read messages and reply in real time." /></div>
+            <div className="grid flex-1 place-items-center p-8 text-center">
+              <div className="max-w-sm">
+                <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-600">
+                  <MessageCircle className="h-7 w-7" aria-hidden="true" />
+                </span>
+                <h3 className="mt-4 font-display text-lg font-bold text-ink">Your inbox is ready</h3>
+                <p className="mt-1 text-sm leading-6 text-muted">Select a conversation to read messages and reply in real time.</p>
+              </div>
+            </div>
           )}
         </Card>
       </div>

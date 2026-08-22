@@ -54,7 +54,7 @@ export function CommunityCard({
           ) : null}
           {!joined && !pending && onJoin ? (
             <Button size="sm" variant="secondary" disabled={busy} onClick={onJoin}>
-              {busy ? 'Joining...' : 'Join'}
+              {busy ? 'Updating...' : community.privacy === 'PRIVATE' ? 'Request to join' : 'Join'}
             </Button>
           ) : null}
           <Button
@@ -64,8 +64,7 @@ export function CommunityCard({
             onClick={onOpen}
             className="border border-emerald-200 bg-emerald-50 text-emerald-600 hover:border-emerald-300 hover:bg-emerald-100 hover:text-emerald-700"
           >
-            {' '}
-            Enter
+            More info
             <ArrowUpRight className="h-4 w-4" />
           </Button>
         </div>

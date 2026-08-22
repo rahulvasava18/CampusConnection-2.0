@@ -61,6 +61,7 @@ import type {
   TeamRequirementDocument,
 } from '../infrastructure/collaboration.models';
 import type { UserDocument } from '../../identity/infrastructure/user.model';
+import { ClubMembershipModel, ClubModel } from '../../club/infrastructure/club.models';
 
 interface Actor {
   userId: string;
@@ -81,6 +82,15 @@ interface CollaborationDependencies {
   users?: UserRepository;
   blocks?: BlockRepository;
   events?: DomainEventRecorder;
+}
+
+function projectSlugFromName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'project';
 }
 
 export class CollaborationService {
@@ -106,6 +116,24 @@ export class CollaborationService {
   }
   private id(value: string) {
     return new Types.ObjectId(value);
+  }
+  private async communitySlug(name: string, requested?: string) {
+    const base = (requested ?? name)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80) || 'community';
+    let candidate = base;
+    if (requested && (await this.communities.findBySlug(candidate)))
+      throw new AppError('SLUG_EXISTS', 'That community slug is already in use.', 409);
+    let suffix = 2;
+    while (await this.communities.findBySlug(candidate)) {
+      const suffixText = `-${suffix}`;
+      candidate = `${base.slice(0, 90 - suffixText.length)}${suffixText}`;
+      suffix += 1;
+    }
+    return candidate;
   }
   private active(actor: Actor) {
     if (actor.accountState !== 'ACTIVE')
@@ -429,19 +457,30 @@ export class CollaborationService {
     };
   }
   private async projectViewFor(actor: Actor, item: ProjectDocument) {
-    const [member, memberCount, tasks, completedTasks] = await Promise.all([
-      this.projects.findMember(item.id, actor.userId),
+    const member = await this.projects.findMember(item.id, actor.userId);
+    const isMember = member?.status === 'ACTIVE' || item.ownerId.toString() === actor.userId;
+    const [memberCount, tasks, completedTasks] = await Promise.all([
       this.projects.countMembers(item.id),
-      this.projects.listTasks(item.id, { archivedAt: { $exists: false } }, 1000),
-      this.projects.listTasks(item.id, { archivedAt: { $exists: false }, status: 'DONE' }, 1000),
+      isMember
+        ? this.projects.listTasks(item.id, { archivedAt: { $exists: false } }, 1000)
+        : Promise.resolve([] as TaskDocument[]),
+      isMember
+        ? this.projects.listTasks(item.id, { archivedAt: { $exists: false }, status: 'DONE' }, 1000)
+        : Promise.resolve([] as TaskDocument[]),
     ]);
     return {
       ...this.projectView(item),
       memberCount,
-      taskCount: tasks.length,
-      completedTaskCount: completedTasks.length,
-      progressPercent: tasks.length ? Math.round((completedTasks.length / tasks.length) * 100) : 0,
-      isMember: member?.status === 'ACTIVE' || item.ownerId.toString() === actor.userId,
+      ...(isMember
+        ? {
+            taskCount: tasks.length,
+            completedTaskCount: completedTasks.length,
+            progressPercent: tasks.length
+              ? Math.round((completedTasks.length / tasks.length) * 100)
+              : 0,
+          }
+        : {}),
+      isMember,
       ...(member ? { membershipStatus: member.status } : {}),
       ...(member
         ? {
@@ -582,7 +621,7 @@ export class CollaborationService {
   async listTeamRequirements(actor: Actor, teamId: string) {
     const team = await this.teams.findById(teamId);
     if (!team) throw new AppError('RESOURCE_NOT_FOUND', 'The team was not found.', 404);
-    await this.teamAccess(actor, team);
+    await this.teamAccess(actor, team, false, true);
     const items = await this.teams.listRequirements(teamId);
     return {
       data: items.map((item) => this.requirementView(item)),
@@ -729,11 +768,16 @@ export class CollaborationService {
       throw new AppError('FORBIDDEN', 'Community administration permission is required.', 403);
     return community;
   }
-  private async teamAccess(actor: Actor, team: TeamDocument, write = false) {
+  private async teamAccess(
+    actor: Actor,
+    team: TeamDocument,
+    write = false,
+    memberOnly = false,
+  ) {
     const member = await this.teams.findMember(team.id, actor.userId);
     const allowed =
-      team.ownerId.toString() === actor.userId ||
-      team.visibility !== 'PRIVATE' ||
+      (!memberOnly &&
+        (team.ownerId.toString() === actor.userId || team.visibility !== 'PRIVATE')) ||
       member?.status === 'ACTIVE';
     if (!allowed) throw new AppError('FORBIDDEN', 'You cannot access this team.', 403);
     if (
@@ -764,11 +808,16 @@ export class CollaborationService {
       throw new AppError('FORBIDDEN', 'Only the team owner can perform this action.', 403);
     return team;
   }
-  private async projectAccess(actor: Actor, project: ProjectDocument, write = false) {
+  private async projectAccess(
+    actor: Actor,
+    project: ProjectDocument,
+    write = false,
+    memberOnly = false,
+  ) {
     const member = await this.projects.findMember(project.id, actor.userId);
     const allowed =
       project.ownerId.toString() === actor.userId ||
-      ['PUBLIC', 'CAMPUS', 'CONNECTIONS'].includes(project.visibility) ||
+      (!memberOnly && ['PUBLIC', 'CAMPUS', 'CONNECTIONS'].includes(project.visibility)) ||
       member?.status === 'ACTIVE';
     if (!allowed) throw new AppError('FORBIDDEN', 'You cannot access this project.', 403);
     if (
@@ -813,7 +862,7 @@ export class CollaborationService {
     actor: Actor,
     input: {
       name: string;
-      slug: string;
+      slug?: string;
       description: string;
       category: string;
       tags: string[];
@@ -827,11 +876,10 @@ export class CollaborationService {
   ) {
     this.active(actor);
     await this.requireUser(actor.userId);
-    if (await this.communities.findBySlug(input.slug))
-      throw new AppError('SLUG_EXISTS', 'That community slug is already in use.', 409);
+    const slug = await this.communitySlug(input.name, input.slug);
     return withMongoTransaction(async (session) => {
       const community = await this.communities.create(
-        { ...input, ownerId: this.id(actor.userId), status: 'ACTIVE', memberCount: 1 },
+        { ...input, slug, ownerId: this.id(actor.userId), status: 'ACTIVE', memberCount: 1 },
         session,
       );
       await this.communities.saveMember(
@@ -886,7 +934,7 @@ export class CollaborationService {
     const allowed: Array<Awaited<ReturnType<typeof this.communityViewFor>>> = [];
     for (const item of items) {
       const view = await this.communityViewFor(actor, item);
-      if (item.privacy !== 'PRIVATE' || view.isMember) allowed.push(view);
+      allowed.push(view);
       if (allowed.length === input.limit) break;
     }
     return this.page(allowed, input.limit);
@@ -905,7 +953,8 @@ export class CollaborationService {
   async getCommunity(actor: Actor, communityId: string) {
     const community = await this.communities.findById(communityId);
     if (!community) throw new AppError('RESOURCE_NOT_FOUND', 'The community was not found.', 404);
-    await this.communityAccess(actor, community);
+    if (community.status !== 'ACTIVE')
+      throw new AppError('RESOURCE_NOT_FOUND', 'The community was not found.', 404);
     return this.communityViewFor(actor, community);
   }
   async updateCommunity(
@@ -1641,8 +1690,8 @@ export class CollaborationService {
     actor: Actor,
     input: {
       name: string;
-      description: string;
-      goal: string;
+      description?: string;
+      goal?: string;
       category: string;
       tags: string[];
       avatarUrl?: string;
@@ -1665,8 +1714,8 @@ export class CollaborationService {
       const created = await this.teams.create(
         {
           name: input.name,
-          description: input.description,
-          goal: input.goal,
+          description: input.description?.trim() ?? '',
+          goal: input.goal?.trim() ?? '',
           category: input.category,
           tags: input.tags,
           ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
@@ -1738,14 +1787,7 @@ export class CollaborationService {
     );
     const visible = [];
     for (const team of items) {
-      if (
-        team.visibility !== 'PRIVATE' ||
-        team.ownerId.toString() === actor.userId ||
-        (await this.teams
-          .findMember(team.id, actor.userId)
-          .then((member) => member?.status === 'ACTIVE'))
-      )
-        visible.push(await this.teamViewFor(actor, team));
+      visible.push(await this.teamViewFor(actor, team));
       if (visible.length === input.limit) break;
     }
     return this.page(visible, input.limit);
@@ -1753,7 +1795,6 @@ export class CollaborationService {
   async getTeam(actor: Actor, teamId: string) {
     const team = await this.teams.findById(teamId);
     if (!team) throw new AppError('RESOURCE_NOT_FOUND', 'The team was not found.', 404);
-    await this.teamAccess(actor, team);
     return this.teamViewFor(actor, team);
   }
   async getTeamInvitationPreview(actor: Actor, teamId: string) {
@@ -1890,52 +1931,34 @@ export class CollaborationService {
     const existing = await this.teams.findMember(teamId, actor.userId);
     if (existing?.status === 'ACTIVE' || existing?.status === 'PENDING')
       throw new AppError('MEMBERSHIP_EXISTS', 'A team membership already exists.', 409);
-    if (team.visibility === 'PRIVATE') {
-      if (await this.teams.findPendingJoinRequest(teamId, actor.userId))
-        throw new AppError('REQUEST_EXISTS', 'A join request is already pending.', 409);
-      const member = await withMongoTransaction(async (session) => {
-        const result = await this.teams.saveMember(
-          teamId,
-          actor.userId,
-          { role: 'MEMBER', status: 'PENDING' },
-          session,
-        );
-        const request = await this.teams.createJoinRequest(
-          {
-            teamId: this.id(teamId),
-            userId: this.id(actor.userId),
-            status: 'PENDING',
-            ...(message?.trim() ? { message: message.trim() } : {}),
-          },
-          session,
-        );
-        await this.record(
-          'TEAM_JOIN_REQUESTED',
-          'TEAM_JOIN_REQUEST',
-          request.id,
-          actor.userId,
-          correlationId,
-          { teamId, targetUserId: team.ownerId.toString() },
-          session,
-        );
-        return result;
-      });
-      return this.teamMemberView(member);
-    }
+    if (team.visibility === 'PRIVATE')
+      throw new AppError(
+        'PRIVATE_TEAM_INVITATION_ONLY',
+        'Private teams can only be joined through an owner invitation.',
+        403,
+      );
+    if (await this.teams.findPendingJoinRequest(teamId, actor.userId))
+      throw new AppError('REQUEST_EXISTS', 'A join request is already pending.', 409);
     const member = await withMongoTransaction(async (session) => {
-      const reserved = await this.teams.reserveMemberSlot(teamId, team.maxMembers, session);
-      if (!reserved)
-        throw new AppError('TEAM_CAPACITY_REACHED', 'This team has reached capacity.', 409);
       const result = await this.teams.saveMember(
         teamId,
         actor.userId,
-        { role: 'MEMBER', status: 'ACTIVE', joinedAt: new Date() },
+        { role: 'MEMBER', status: 'PENDING' },
+        session,
+      );
+      const request = await this.teams.createJoinRequest(
+        {
+          teamId: this.id(teamId),
+          userId: this.id(actor.userId),
+          status: 'PENDING',
+          ...(message?.trim() ? { message: message.trim() } : {}),
+        },
         session,
       );
       await this.record(
-        'TEAM_MEMBER_JOINED',
-        'TEAM_MEMBER',
-        result.id,
+        'TEAM_JOIN_REQUESTED',
+        'TEAM_JOIN_REQUEST',
+        request.id,
         actor.userId,
         correlationId,
         { teamId, targetUserId: team.ownerId.toString() },
@@ -2105,7 +2128,7 @@ export class CollaborationService {
   async listTeamMembers(actor: Actor, teamId: string, input: CursorInput) {
     const team = await this.teams.findById(teamId);
     if (!team) throw new AppError('RESOURCE_NOT_FOUND', 'The team was not found.', 404);
-    await this.teamAccess(actor, team);
+    await this.teamAccess(actor, team, false, true);
     const members = await this.teams.listMembers(
       teamId,
       { status: 'ACTIVE', ...this.cursorFilter(input.cursor) },
@@ -2270,7 +2293,7 @@ export class CollaborationService {
     actor: Actor,
     input: {
       name: string;
-      slug: string;
+      slug?: string;
       description: string;
       objective: string;
       category: string;
@@ -2294,15 +2317,20 @@ export class CollaborationService {
       if (!['ACTIVE', 'RECRUITING'].includes(team.status))
         throw new AppError('TEAM_CLOSED', 'The project team is not active.', 409);
     }
-    if (await this.projects.list({ slug: input.slug }, 1).then((items) => items.length > 0))
-      throw new AppError('SLUG_EXISTS', 'That project slug is already in use.', 409);
+    const baseSlug = projectSlugFromName(input.slug || input.name);
+    let slug = baseSlug;
+    let suffix = 2;
+    while (await this.projects.list({ slug }, 1).then((items) => items.length > 0)) {
+      slug = `${baseSlug}-${suffix}`;
+      suffix += 1;
+    }
     const project = await withMongoTransaction(async (session) => {
       const created = await this.projects.create(
         {
           name: input.name,
-          slug: input.slug,
-          description: input.description,
-          objective: input.objective,
+          slug,
+          description: input.description || '',
+          objective: input.objective || '',
           category: input.category,
           tags: input.tags,
           visibility: input.visibility,
@@ -2371,14 +2399,10 @@ export class CollaborationService {
     );
     const visible = [];
     for (const project of items) {
-      if (
-        ['PUBLIC', 'CAMPUS', 'CONNECTIONS'].includes(project.visibility) ||
-        project.ownerId.toString() === actor.userId ||
-        (await this.projects
-          .findMember(project.id, actor.userId)
-          .then((member) => member?.status === 'ACTIVE'))
-      )
-        visible.push(await this.projectViewFor(actor, project));
+      // Discovery is intentionally open to all active users. Private project
+      // summaries contain no workspace data; membership is enforced by the
+      // member-only endpoints used by the detail workspace.
+      visible.push(await this.projectViewFor(actor, project));
       if (visible.length === input.limit) break;
     }
     return this.page(visible, input.limit);
@@ -2386,7 +2410,8 @@ export class CollaborationService {
   async getProject(actor: Actor, projectId: string) {
     const project = await this.projects.findById(projectId);
     if (!project) throw new AppError('RESOURCE_NOT_FOUND', 'The project was not found.', 404);
-    await this.projectAccess(actor, project);
+    // The project summary is intentionally safe to show to any active user.
+    // Workspace data remains protected by member-only access checks below.
     return this.projectViewFor(actor, project);
   }
   async updateProject(
@@ -2401,6 +2426,8 @@ export class CollaborationService {
       visibility: ProjectVisibility;
       technologies: string[];
       lookingFor: string[];
+      ownerTeamId?: string;
+      teamId?: string;
       deadline?: string;
       coverImageUrl?: string;
       repositoryUrl: string;
@@ -2410,9 +2437,20 @@ export class CollaborationService {
   ) {
     this.active(actor);
     await this.projectManager(actor, projectId);
-    const { deadline, ...rest } = input;
+    const associatedTeamId = input.teamId ?? input.ownerTeamId;
+    if (associatedTeamId) {
+      const team = await this.teamManager(actor, associatedTeamId);
+      if (!['ACTIVE', 'RECRUITING'].includes(team.status))
+        throw new AppError('TEAM_CLOSED', 'The project team is not active.', 409);
+    }
+    const { deadline, ownerTeamId, teamId, ...rest } = input;
+    void ownerTeamId;
+    void teamId;
     const changes: Partial<ProjectDocument> = {
       ...rest,
+      ...(associatedTeamId
+        ? { teamId: this.id(associatedTeamId), ownerTeamId: this.id(associatedTeamId) }
+        : {}),
       ...(deadline ? { deadline: new Date(deadline) } : {}),
     };
     const updated = await withMongoTransaction(async (session) => {
@@ -2528,52 +2566,37 @@ export class CollaborationService {
     const existing = await this.projects.findMember(projectId, actor.userId);
     if (existing?.status === 'ACTIVE' || existing?.status === 'PENDING')
       throw new AppError('MEMBERSHIP_EXISTS', 'A project membership already exists.', 409);
-    if (project.visibility === 'PRIVATE') {
-      if (await this.projects.findPendingJoinRequest(projectId, actor.userId))
-        throw new AppError('REQUEST_EXISTS', 'A join request is already pending.', 409);
-      const member = await withMongoTransaction(async (session) => {
-        await this.projects.saveMember(
-          projectId,
-          actor.userId,
-          { role: 'COLLABORATOR', status: 'PENDING' },
-          session,
-        );
-        const request = await this.projects.createJoinRequest(
-          {
-            projectId: this.id(projectId),
-            userId: this.id(actor.userId),
-            status: 'PENDING',
-            ...(message?.trim() ? { message: message.trim() } : {}),
-          },
-          session,
-        );
-        await this.record(
-          'PROJECT_JOIN_REQUESTED',
-          'PROJECT_JOIN_REQUEST',
-          request.id,
-          actor.userId,
-          correlationId,
-          { projectId, targetUserId: project.ownerId.toString() },
-          session,
-        );
-        return request;
-      });
-      return this.projectJoinRequestView(member);
-    }
+    if (project.visibility === 'PRIVATE')
+      throw new AppError(
+        'PRIVATE_PROJECT_INVITATION_ONLY',
+        'Private projects can only be joined through an owner invitation.',
+        403,
+      );
+    if (await this.projects.findPendingJoinRequest(projectId, actor.userId))
+      throw new AppError('REQUEST_EXISTS', 'A join request is already pending.', 409);
     const member = await withMongoTransaction(async (session) => {
       const result = await this.projects.saveMember(
         projectId,
         actor.userId,
-        { role: 'COLLABORATOR', status: 'ACTIVE', joinedAt: new Date() },
+        { role: 'COLLABORATOR', status: 'PENDING' },
+        session,
+      );
+      const request = await this.projects.createJoinRequest(
+        {
+          projectId: this.id(projectId),
+          userId: this.id(actor.userId),
+          status: 'PENDING',
+          ...(message?.trim() ? { message: message.trim() } : {}),
+        },
         session,
       );
       await this.record(
-        'PROJECT_MEMBER_ADDED',
-        'PROJECT_MEMBER',
-        result.id,
+        'PROJECT_JOIN_REQUESTED',
+        'PROJECT_JOIN_REQUEST',
+        request.id,
         actor.userId,
         correlationId,
-        { projectId, targetUserId: project.ownerId.toString(), userId: actor.userId },
+        { projectId, targetUserId: project.ownerId.toString() },
         session,
       );
       return result;
@@ -2894,7 +2917,7 @@ export class CollaborationService {
   async listProjectMembers(actor: Actor, projectId: string, input: CursorInput) {
     const project = await this.projects.findById(projectId);
     if (!project) throw new AppError('RESOURCE_NOT_FOUND', 'The project was not found.', 404);
-    await this.projectAccess(actor, project);
+    await this.projectAccess(actor, project, false, true);
     const members = await this.projects.listMembers(
       projectId,
       { status: 'ACTIVE', ...this.cursorFilter(input.cursor) },
@@ -3284,7 +3307,7 @@ export class CollaborationService {
     return this.projectResourceView(resource);
   }
   async listProjectResources(actor: Actor, projectId: string) {
-    await this.projectAccess(actor, await this.requireProject(projectId));
+    await this.projectAccess(actor, await this.requireProject(projectId), false, true);
     const resources = await this.projects.listResources(projectId, 100);
     return {
       data: resources.map((item) => this.projectResourceView(item)),
@@ -3368,7 +3391,7 @@ export class CollaborationService {
     return this.projectActivityView(activity);
   }
   async listProjectActivity(actor: Actor, projectId: string) {
-    await this.projectAccess(actor, await this.requireProject(projectId));
+    await this.projectAccess(actor, await this.requireProject(projectId), false, true);
     const items = await this.projects.listActivity(projectId, 100);
     return {
       data: items.map((item) => this.projectActivityView(item)),
@@ -3384,17 +3407,31 @@ export class CollaborationService {
   }
   private async eventAccessible(actor: Actor, item: EventDocument) {
     if (item.organizerId.toString() === actor.userId || item.visibility !== 'PRIVATE') return true;
+    if (item.organizerClub) {
+      const clubMember = await ClubMembershipModel.findOne({ clubId: item.organizerClub, userId: this.id(actor.userId), status: 'ACTIVE' }).exec();
+      if (clubMember) return true;
+    }
     const registration = await this.eventRecords.findRegistration(item.id, actor.userId);
     return registration ? ['REGISTERED', 'ATTENDED'].includes(registration.status) : false;
   }
   private async eventAccess(actor: Actor, item: EventDocument) {
     const registration = await this.eventRecords.findRegistration(item.id, actor.userId);
     const isOrganizer = item.organizerId.toString() === actor.userId;
-    const isPrivateParticipant = ['REGISTERED', 'ATTENDED'].includes(registration?.status ?? '');
+    const clubMember = item.organizerClub
+      ? await ClubMembershipModel.findOne({ clubId: item.organizerClub, userId: this.id(actor.userId), status: 'ACTIVE' }).exec()
+      : null;
+    const isPrivateParticipant = Boolean(clubMember) || ['REGISTERED', 'ATTENDED'].includes(registration?.status ?? '');
     if (!isOrganizer && item.visibility === 'PRIVATE' && !isPrivateParticipant) {
       throw new AppError('FORBIDDEN', 'You cannot access this private event.', 403);
     }
     return registration;
+  }
+  private async canManageEvent(actor: Actor, item: EventDocument) {
+    if (!item.organizerClub) return item.organizerId.toString() === actor.userId;
+    const club = await ClubModel.findById(item.organizerClub).exec();
+    if (!club || club.status !== 'APPROVED') return false;
+    const membership = await ClubMembershipModel.findOne({ clubId: item.organizerClub, userId: this.id(actor.userId), status: 'ACTIVE' }).exec();
+    return Boolean(membership && ['OWNER', 'SECRETARY'].includes(membership.role));
   }
   private async eventViewFor(
     actor: Actor,
@@ -3406,6 +3443,9 @@ export class CollaborationService {
         ? await this.eventRecords.findRegistration(item.id, actor.userId)
         : registration;
     const organizer = await this.users.findById(item.organizerId.toString());
+    const organizerClub = item.organizerClub
+      ? await ClubModel.findById(item.organizerClub).lean().exec()
+      : null;
     const status = this.eventStatus(item);
     const full = item.capacity !== undefined && item.registrationCount >= item.capacity;
     const registrationClosed = Boolean(
@@ -3418,6 +3458,20 @@ export class CollaborationService {
       description: item.description,
       organizerId: item.organizerId.toString(),
       ...(organizer ? { organizer: this.userSummary(organizer) } : {}),
+      ...(organizerClub
+        ? {
+            organizerClub: {
+              id: organizerClub._id.toString(),
+              name: organizerClub.name,
+              slug: organizerClub.slug,
+              category: organizerClub.category,
+              privacy: organizerClub.privacy,
+              status: organizerClub.status,
+              ...(organizerClub.logoUrl ? { logoUrl: organizerClub.logoUrl } : {}),
+              ...(organizerClub.bannerUrl ? { bannerUrl: organizerClub.bannerUrl } : {}),
+            },
+          }
+        : {}),
       category: item.category,
       tags: item.tags ?? [],
       ...(item.coverImageUrl ? { coverImageUrl: item.coverImageUrl } : {}),
@@ -3442,6 +3496,9 @@ export class CollaborationService {
       rules: item.rules ?? [],
       ...(item.teamId ? { teamId: item.teamId.toString() } : {}),
       ...(item.communityId ? { communityId: item.communityId.toString() } : {}),
+      ...(item.organizerClub ? { organizerClubId: item.organizerClub.toString() } : {}),
+      ...(item.createdBy ? { createdBy: item.createdBy.toString() } : {}),
+      ...(item.registrationUrl ? { registrationUrl: item.registrationUrl } : {}),
       ...(currentRegistration ? { registrationStatus: currentRegistration.status } : {}),
       isRegistered,
       canRegister:
@@ -3513,6 +3570,7 @@ export class CollaborationService {
       startAt: string;
       endAt: string;
       registrationDeadline?: string;
+      registrationUrl?: string;
       capacity?: number;
       registrationRequired: boolean;
       visibility: EventVisibility;
@@ -3566,6 +3624,7 @@ export class CollaborationService {
           ...(input.registrationDeadline
             ? { registrationDeadline: new Date(input.registrationDeadline) }
             : {}),
+          ...(input.registrationUrl ? { registrationUrl: input.registrationUrl } : {}),
           status: 'UPCOMING',
           registrationCount: 0,
         },
@@ -3657,6 +3716,7 @@ export class CollaborationService {
       startAt: string;
       endAt: string;
       registrationDeadline?: string;
+      registrationUrl?: string;
       capacity?: number;
       registrationRequired: boolean;
       visibility: EventVisibility;
@@ -3669,7 +3729,7 @@ export class CollaborationService {
     this.active(actor);
     const current = await this.eventRecords.findById(eventId);
     if (!current) throw new AppError('RESOURCE_NOT_FOUND', 'The event was not found.', 404);
-    if (current.organizerId.toString() !== actor.userId)
+    if (!(await this.canManageEvent(actor, current)))
       throw new AppError('FORBIDDEN', 'Only the event organizer can edit this event.', 403);
     if (['CANCELLED', 'ARCHIVED'].includes(current.status))
       throw new AppError('EVENT_CLOSED', 'This event can no longer be edited.', 409);
@@ -3715,6 +3775,7 @@ export class CollaborationService {
     if (input.meetingLink !== undefined) changes.meetingLink = input.meetingLink;
     if (input.registrationDeadline !== undefined && deadline)
       changes.registrationDeadline = deadline;
+    if (input.registrationUrl !== undefined) changes.registrationUrl = input.registrationUrl;
     if (input.capacity !== undefined) changes.capacity = input.capacity;
     if (input.registrationRequired !== undefined)
       changes.registrationRequired = input.registrationRequired;
@@ -3742,7 +3803,7 @@ export class CollaborationService {
     this.active(actor);
     const current = await this.eventRecords.findById(eventId);
     if (!current) throw new AppError('RESOURCE_NOT_FOUND', 'The event was not found.', 404);
-    if (current.organizerId.toString() !== actor.userId)
+    if (!(await this.canManageEvent(actor, current)))
       throw new AppError('FORBIDDEN', 'Only the event organizer can cancel this event.', 403);
     if (current.status === 'ARCHIVED')
       throw new AppError('EVENT_CLOSED', 'This event is archived.', 409);
@@ -3766,7 +3827,7 @@ export class CollaborationService {
     this.active(actor);
     const current = await this.eventRecords.findById(eventId);
     if (!current) throw new AppError('RESOURCE_NOT_FOUND', 'The event was not found.', 404);
-    if (current.organizerId.toString() !== actor.userId)
+    if (!(await this.canManageEvent(actor, current)))
       throw new AppError('FORBIDDEN', 'Only the event organizer can archive this event.', 403);
     const updated = await withMongoTransaction(async (session) => {
       const result = await this.eventRecords.update(eventId, { status: 'ARCHIVED' }, session);
@@ -3797,6 +3858,12 @@ export class CollaborationService {
       throw new AppError(
         'REGISTRATION_NOT_REQUIRED',
         'This event does not require registration.',
+        409,
+      );
+    if (event.registrationUrl)
+      throw new AppError(
+        'EXTERNAL_REGISTRATION',
+        'This event uses external registration.',
         409,
       );
     if (!['UPCOMING', 'ONGOING'].includes(status))

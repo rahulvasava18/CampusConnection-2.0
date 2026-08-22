@@ -41,6 +41,7 @@ import {
 import {
   GoogleAuthStateRepository,
 } from '../infrastructure/google-auth-state.model';
+import { PasswordResetAuthorizationRepository } from '../infrastructure/password-reset-authorization.model';
 import {
   createGoogleOAuthClient,
   type GoogleOAuthClient,
@@ -78,6 +79,7 @@ interface ServiceDependencies {
   rateLimiter?: RedisRateLimiter;
   emailService?: EmailService;
   googleAuthStates?: GoogleAuthStateRepository;
+  passwordResetAuthorizations?: PasswordResetAuthorizationRepository;
   googleOAuth?: GoogleOAuthClient;
 }
 
@@ -90,6 +92,7 @@ export class AuthService {
   private readonly events: DomainEventRecorder;
   private readonly rateLimiter: RedisRateLimiter;
   private readonly googleAuthStates: GoogleAuthStateRepository;
+  private readonly passwordResetAuthorizations: PasswordResetAuthorizationRepository;
   private readonly googleOAuth: GoogleOAuthClient | undefined;
   private emailService: EmailService | undefined;
 
@@ -102,6 +105,8 @@ export class AuthService {
     this.events = dependencies.events ?? new DomainEventRecorder();
     this.rateLimiter = dependencies.rateLimiter ?? new RedisRateLimiter();
     this.googleAuthStates = dependencies.googleAuthStates ?? new GoogleAuthStateRepository();
+    this.passwordResetAuthorizations =
+      dependencies.passwordResetAuthorizations ?? new PasswordResetAuthorizationRepository();
     this.googleOAuth = dependencies.googleOAuth;
     this.emailService = dependencies.emailService;
   }
@@ -380,6 +385,26 @@ export class AuthService {
     await this.googleAuthStates.create({
       stateHash: hashOpaqueToken(state),
       nonce,
+      purpose: 'SIGN_IN',
+      status: 'STARTED',
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+    return this.googleClient().authorizationUrl(state, nonce);
+  }
+
+  public async startPasswordRecoveryGoogle(context: AuthContext): Promise<string> {
+    const user = await this.users.findById(context.userId);
+    if (!user) throw new AppError('AUTHENTICATION_REQUIRED', 'Authentication is required.', 401);
+    await this.assertCanAuthenticate(user);
+    const state = createOpaqueToken(32);
+    const nonce = createOpaqueToken(32);
+    await this.googleAuthStates.create({
+      stateHash: hashOpaqueToken(state),
+      nonce,
+      purpose: 'PASSWORD_RECOVERY',
+      userId: user._id,
+      sessionId: context.sessionId,
+      familyId: context.familyId,
       status: 'STARTED',
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     });
@@ -399,7 +424,23 @@ export class AuthService {
     });
     if (!readyState) throw new AppError('GOOGLE_AUTH_FAILED', 'Google authentication failed.', 401);
     const frontendUrl = getEnv().FRONTEND_URL.replace(/\/$/, '');
-    return `${frontendUrl}/auth/google/callback?code=${encodeURIComponent(handoffToken)}`;
+    const callbackPath =
+      authState.purpose === 'PASSWORD_RECOVERY'
+        ? '/auth/google/password-recovery/callback'
+        : '/auth/google/callback';
+    return `${frontendUrl}${callbackPath}?code=${encodeURIComponent(handoffToken)}`;
+  }
+
+  public async googleCallbackFailureRedirect(state?: string): Promise<string> {
+    const authState = state
+      ? await this.googleAuthStates.findStarted(hashOpaqueToken(state))
+      : null;
+    const frontendUrl = getEnv().FRONTEND_URL.replace(/\/$/, '');
+    const callbackPath =
+      authState?.purpose === 'PASSWORD_RECOVERY'
+        ? '/auth/google/password-recovery/callback?error=1'
+        : '/login?googleError=1';
+    return `${frontendUrl}${callbackPath}`;
   }
 
   public async exchangeGoogleCode(
@@ -410,7 +451,13 @@ export class AuthService {
     | ({ onboardingRequired: false } & AuthSessionResult)
   > {
     const authState = await this.googleAuthStates.consumeHandoff(hashOpaqueToken(handoffToken));
-    if (!authState || !authState.handoffTokenHash || !authState.googleId || !authState.email)
+    if (
+      !authState ||
+      authState.purpose !== 'SIGN_IN' ||
+      !authState.handoffTokenHash ||
+      !authState.googleId ||
+      !authState.email
+    )
       throw new AppError('GOOGLE_AUTH_FAILED', 'Google authentication failed.', 401);
     const identity: GoogleIdentity = {
       googleId: authState.googleId,
@@ -446,6 +493,60 @@ export class AuthService {
       displayName: identity.displayName,
       email: identity.email,
     };
+  }
+
+  public async exchangePasswordRecoveryGoogleCode(
+    handoffToken: string,
+    meta: RequestMeta,
+  ): Promise<{ verified: true; resetToken: string }> {
+    const authState = await this.googleAuthStates.consumeHandoff(hashOpaqueToken(handoffToken));
+    if (
+      !authState ||
+      authState.purpose !== 'PASSWORD_RECOVERY' ||
+      !authState.handoffTokenHash ||
+      !authState.googleId ||
+      !authState.email ||
+      !authState.userId ||
+      !authState.sessionId ||
+      !authState.familyId
+    ) {
+      throw new AppError('GOOGLE_RECOVERY_INVALID', 'Google verification has expired or is invalid.', 401);
+    }
+
+    const session = await this.sessions.findActiveForFamily(
+      authState.userId.toString(),
+      authState.familyId,
+    );
+    const user = await this.users.findById(authState.userId);
+    if (!session || !user) {
+      throw new AppError('GOOGLE_RECOVERY_INVALID', 'Google verification has expired or is invalid.', 401);
+    }
+    await this.assertCanAuthenticate(user);
+
+    const verifiedEmail = (user.emailNormalized ?? user.email).trim().toLowerCase();
+    const googleIdentityMatches = !user.googleId || user.googleId === authState.googleId;
+    if (verifiedEmail !== authState.email.trim().toLowerCase() || !googleIdentityMatches) {
+      throw new AppError(
+        'GOOGLE_ACCOUNT_MISMATCH',
+        'That Google account does not match your CampusConnection account.',
+        403,
+      );
+    }
+
+    const resetToken = createOpaqueToken(32);
+    await this.transaction(async (dbSession) => {
+      await this.passwordResetAuthorizations.create(
+        {
+          tokenHash: hashOpaqueToken(resetToken),
+          userId: user._id,
+          familyId: authState.familyId!,
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        },
+        dbSession,
+      );
+    });
+    await this.recordAudit('GOOGLE_PASSWORD_RECOVERY_VERIFIED', user._id, meta);
+    return { verified: true, resetToken };
   }
 
   public async isGoogleUsernameAvailable(

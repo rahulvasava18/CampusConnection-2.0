@@ -5,6 +5,11 @@ import { withMongoTransaction } from '../../collaboration/application/collaborat
 import { UserModel } from '../../identity/infrastructure/user.model';
 import type { AuthContext } from '../../identity/interfaces/auth.types';
 import { hashPassword, verifyPassword } from '../../identity/security/password.service';
+import { hashOpaqueToken } from '../../identity/security/token.service';
+import {
+  PasswordResetAuthorizationRepository,
+} from '../../identity/infrastructure/password-reset-authorization.model';
+import { SessionRepository } from '../../identity/infrastructure/identity.repositories';
 
 const defaultPreferences: UserPreferences = {
   notifications: {
@@ -29,7 +34,11 @@ export interface SettingsUpdateInput {
 }
 
 export class SettingsService {
-  public constructor(private readonly events = new DomainEventRecorder()) {}
+  public constructor(
+    private readonly events = new DomainEventRecorder(),
+    private readonly passwordResetAuthorizations = new PasswordResetAuthorizationRepository(),
+    private readonly sessions = new SessionRepository(),
+  ) {}
 
   private active(context: AuthContext) {
     if (!['ACTIVE', 'RESTRICTED'].includes(context.user.accountState))
@@ -130,6 +139,46 @@ export class SettingsService {
           actorId: user.id,
           correlationId,
           payload: { userId: user.id, fields: ['passwordHash'] },
+        },
+        session,
+      );
+    });
+    return this.view(user);
+  }
+
+  public async setPasswordWithRecovery(
+    context: AuthContext,
+    input: { newPassword: string },
+    resetToken: string | undefined,
+    correlationId: string,
+  ): Promise<UserSettingsView> {
+    this.active(context);
+    if (!resetToken)
+      throw new AppError('PASSWORD_RESET_AUTHORIZATION_INVALID', 'Password recovery is invalid or expired.', 401);
+    const user = await UserModel.findById(context.userId).select('+passwordHash').exec();
+    if (!user) throw new AppError('AUTHENTICATION_REQUIRED', 'Authentication is required.', 401);
+    const passwordHash = await hashPassword(input.newPassword);
+    await withMongoTransaction(async (session) => {
+      const authorization = await this.passwordResetAuthorizations.consumeForUserSession(
+        hashOpaqueToken(resetToken),
+        user._id,
+        context.familyId,
+        session,
+      );
+      if (!authorization)
+        throw new AppError('PASSWORD_RESET_AUTHORIZATION_INVALID', 'Password recovery is invalid or expired.', 401);
+      user.passwordHash = passwordHash;
+      await user.save({ session });
+      await this.sessions.revokeOthersForUser(user._id, context.sessionId, session);
+      await this.events.record(
+        {
+          eventType: 'PROFILE_UPDATED',
+          producer: 'identity',
+          aggregateType: 'User',
+          aggregateId: user.id,
+          actorId: user.id,
+          correlationId,
+          payload: { userId: user.id, fields: ['passwordHash'], reason: 'GOOGLE_PASSWORD_RECOVERY' },
         },
         session,
       );

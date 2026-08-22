@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { SearchResult } from '@campusconnection/shared';
 import { apiErrorMessage, collectionItems } from '../../lib/api-state';
 import {
   Avatar,
@@ -30,6 +31,7 @@ import {
   getProjectJoinRequests,
   getProjectMembers,
   getProjectResources,
+  getTeams,
   getTasks,
   inviteProjectMember,
   joinProject,
@@ -44,8 +46,16 @@ import {
   updateTask,
   updateTaskStatus,
 } from '../../features/collaboration/collaboration.api';
+import { search } from '../../features/discovery/discovery.api';
 
-type ProjectTab = 'overview' | 'tasks' | 'milestones' | 'resources' | 'activity' | 'manage';
+type ProjectTab =
+  | 'overview'
+  | 'tasks'
+  | 'milestones'
+  | 'resources'
+  | 'activity'
+  | 'manage'
+  | 'settings';
 
 export function ProjectDetail({
   projectId,
@@ -56,11 +66,18 @@ export function ProjectDetail({
 }) {
   const client = useQueryClient();
   const [tab, setTab] = useState<ProjectTab>('overview');
-  const [inviteeId, setInviteeId] = useState('');
+  const [inviteSearch, setInviteSearch] = useState('');
+  const [selectedInvitee, setSelectedInvitee] = useState<SearchResult | null>(null);
   const [transferUserId, setTransferUserId] = useState('');
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editObjective, setEditObjective] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editTags, setEditTags] = useState('');
+  const [editLookingFor, setEditLookingFor] = useState('');
+  const [editDeadline, setEditDeadline] = useState('');
+  const [editVisibility, setEditVisibility] = useState('');
+  const [editTeamId, setEditTeamId] = useState('');
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskPriority, setTaskPriority] = useState('MEDIUM');
@@ -78,6 +95,12 @@ export function ProjectDetail({
     queryFn: () => getProjectMembers(projectId),
     enabled: Boolean(project.data?.isMember || project.data?.membershipRole === 'OWNER'),
   });
+  const invitePeople = useQuery({
+    queryKey: ['project-invite-people', projectId, inviteSearch.trim()],
+    queryFn: () => search(inviteSearch.trim(), 'people'),
+    enabled: tab === 'manage' && inviteSearch.trim().length >= 2,
+  });
+  const teams = useQuery({ queryKey: ['teams'], queryFn: () => getTeams(), enabled: tab === 'settings' });
   const tasks = useQuery({
     queryKey: ['project-tasks', projectId],
     queryFn: () => getTasks(projectId),
@@ -129,12 +152,24 @@ export function ProjectDetail({
       updateProject(projectId, {
         name: editName.trim() || item.name,
         description: editDescription.trim() || item.description,
-        objective: editObjective.trim() || item.objective || 'Project objective',
-        category: item.category ?? 'Technology',
-        tags: item.tags ?? [],
+        objective: editObjective.trim() || item.objective || '',
+        category: editCategory.trim() || item.category || 'Technology',
+        tags: (editTags || item.tags?.join(',') || '')
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
         technologies: item.technologies,
-        lookingFor: item.lookingFor ?? [],
-        visibility: item.visibility,
+        lookingFor: editLookingFor.trim()
+          ? editLookingFor
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean)
+          : item.lookingFor ?? [],
+        ...(editDeadline.trim()
+          ? { deadline: new Date(`${editDeadline}T23:59:59.000Z`).toISOString() }
+          : {}),
+        ...(editTeamId.trim() ? { teamId: editTeamId } : {}),
+        visibility: editVisibility || item.visibility,
       }),
     onSuccess: refresh,
   });
@@ -151,9 +186,14 @@ export function ProjectDetail({
     onSuccess: () => onNavigate('/projects'),
   });
   const invite = useMutation({
-    mutationFn: () => inviteProjectMember(projectId, inviteeId.trim()),
+    mutationFn: () => {
+      const selectedId = selectedInvitee?.id;
+      if (!selectedId) throw new Error('Select a person to invite.');
+      return inviteProjectMember(projectId, selectedId);
+    },
     onSuccess: () => {
-      setInviteeId('');
+      setInviteSearch('');
+      setSelectedInvitee(null);
       refresh();
     },
   });
@@ -292,6 +332,81 @@ export function ProjectDetail({
     postUpdate.error ??
     invitation.error;
 
+  if (!isMember) {
+    return (
+      <section className="page-theme page-theme-projects space-y-5">
+        <Card className="overflow-hidden">
+          <div className="bg-brand-800 px-5 py-7 text-white sm:px-8">
+            <button
+              type="button"
+              onClick={() => onNavigate('/projects')}
+              className="mb-6 text-sm font-semibold text-white/80 hover:text-white"
+            >
+              ← Projects
+            </button>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge tone="brand">{item.category ?? 'Project'}</Badge>
+                  <Badge tone="neutral">{item.visibility}</Badge>
+                  <Badge tone="neutral">Public details</Badge>
+                </div>
+                <h1 className="type-display mt-3 text-3xl font-bold">{item.name}</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-white/80">
+                  {item.description || 'A campus project looking for collaborators.'}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-5 p-5 sm:p-8">
+            <div className="grid gap-4 border-b border-line pb-5 sm:grid-cols-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Status</p>
+                <p className="mt-1 text-sm font-semibold text-ink">{item.status}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Category</p>
+                <p className="mt-1 text-sm font-semibold text-ink">{item.category ?? 'Project'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Visibility</p>
+                <p className="mt-1 text-sm font-semibold text-ink">{item.visibility}</p>
+              </div>
+            </div>
+            {item.objective ? (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Objective</p>
+                <p className="mt-2 text-sm leading-7 text-slate-700">{item.objective}</p>
+              </div>
+            ) : null}
+            {item.lookingFor?.length ? (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted">Looking for</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {item.lookingFor.map((role) => <Badge key={role}>{role}</Badge>)}
+                </div>
+              </div>
+            ) : null}
+            {item.membershipStatus === 'PENDING' ? (
+              <Button variant="secondary" disabled>Requested</Button>
+            ) : item.visibility === 'PRIVATE' ? (
+              <p className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-muted">
+                This private project is invitation-only. The owner or a collaborator can invite you.
+              </p>
+            ) : item.status === 'COMPLETED' || item.status === 'ARCHIVED' ? (
+              <Button variant="secondary" disabled>{item.status}</Button>
+            ) : (
+              <Button onClick={() => membership.mutate(false)} disabled={membership.isPending}>
+                {membership.isPending ? 'Requesting…' : 'Request to join'}
+              </Button>
+            )}
+            {allError ? <ErrorState message={apiErrorMessage(allError, 'Project action could not be completed.')} /> : null}
+          </div>
+        </Card>
+      </section>
+    );
+  }
+
   return (
     <div className="page-theme page-theme-projects space-y-5">
       <Card className="overflow-hidden">
@@ -366,6 +481,7 @@ export function ProjectDetail({
             'resources',
             'activity',
             ...(isOwner ? ['manage'] : []),
+            ...(isOwner ? ['settings'] : []),
           ] as ProjectTab[]
         ).map((entry) => (
           <button
@@ -753,7 +869,7 @@ export function ProjectDetail({
           </div>
         </Card>
       ) : null}
-      {tab === 'manage' && isOwner ? (
+      {tab === 'settings' && isOwner ? (
         <section className="grid gap-5 lg:grid-cols-2">
           <Card className="p-5">
             <h2 className="type-display text-lg font-bold text-ink">Project settings</h2>
@@ -773,6 +889,54 @@ export function ProjectDetail({
                 value={editObjective || item.objective || ''}
                 onChange={(event) => setEditObjective(event.target.value)}
               />
+              <Field
+                label="Category"
+                value={editCategory || item.category || ''}
+                onChange={(event) => setEditCategory(event.target.value)}
+              />
+              <Field
+                label="Tags (comma separated)"
+                value={editTags || item.tags?.join(', ') || ''}
+                onChange={(event) => setEditTags(event.target.value)}
+              />
+              <Field
+                label="Looking for (comma separated)"
+                value={editLookingFor || item.lookingFor?.join(', ') || ''}
+                onChange={(event) => setEditLookingFor(event.target.value)}
+              />
+              <Field
+                label="Deadline"
+                type="date"
+                value={editDeadline || item.deadline?.slice(0, 10) || ''}
+                onChange={(event) => setEditDeadline(event.target.value)}
+              />
+              <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
+                Visibility
+                <select
+                  value={editVisibility || item.visibility}
+                  onChange={(event) => setEditVisibility(event.target.value)}
+                  className="min-h-11 rounded-[10px] border border-line bg-white px-3.5 text-sm font-normal text-ink"
+                >
+                  <option value="PUBLIC">Public</option>
+                  <option value="CAMPUS">Campus</option>
+                  <option value="PRIVATE">Private</option>
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
+                Associated Team (optional)
+                <select
+                  value={editTeamId || item.teamId || item.ownerTeamId || ''}
+                  onChange={(event) => setEditTeamId(event.target.value)}
+                  className="min-h-11 rounded-[10px] border border-line bg-white px-3.5 text-sm font-normal text-ink"
+                >
+                  <option value="">No associated team</option>
+                  {collectionItems(teams.data).map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <Button
                 onClick={() => edit.mutate()}
                 disabled={edit.isPending || item.status === 'COMPLETED'}
@@ -806,23 +970,79 @@ export function ProjectDetail({
                 </Button>
               </div>
             </div>
+        </Card>
+        {invitations.data?.data?.length ? (
+          <Card className="p-5">
+            <h2 className="type-display text-lg font-bold text-ink">Project invitations</h2>
+            {invitations.data.data.map((entry) => (
+              <div
+                key={entry.id}
+                className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-3"
+              >
+                <span className="mr-auto text-sm font-semibold text-ink">
+                  {entry.project?.name ?? item.name}
+                </span>
+                <Button size="sm" onClick={() => invitation.mutate({ id: entry.id, accept: true })}>
+                  Accept
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => invitation.mutate({ id: entry.id, accept: false })}
+                >
+                  Decline
+                </Button>
+              </div>
+            ))}
           </Card>
+        ) : null}
+      </section>
+      ) : null}
+      {tab === 'manage' && isOwner ? (
+        <section className="grid gap-5 lg:grid-cols-2">
           <Card className="p-5">
             <h2 className="type-display text-lg font-bold text-ink">Invite collaborators</h2>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 grid gap-3">
               <Field
-                className="flex-1"
-                label="User ID"
-                value={inviteeId}
-                onChange={(event) => setInviteeId(event.target.value)}
-                placeholder="Paste a student user id"
+                label="Search people"
+                value={inviteSearch}
+                onChange={(event) => {
+                  setInviteSearch(event.target.value);
+                  setSelectedInvitee(null);
+                }}
+                placeholder="Search by name or username"
               />
+              {inviteSearch.trim().length > 0 && inviteSearch.trim().length < 2 ? (
+                <p className="text-xs text-muted">Enter at least 2 characters.</p>
+              ) : null}
+              <div className="space-y-2">
+                {collectionItems(invitePeople.data)
+                  .filter((result) => result.type === 'person')
+                  .map((result) => (
+                    <button
+                      key={result.id}
+                      type="button"
+                      onClick={() => setSelectedInvitee(result)}
+                      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left ${selectedInvitee?.id === result.id ? 'border-brand-500 bg-brand-50' : 'border-line bg-slate-50'}`}
+                    >
+                      <Avatar name={result.title} src={result.imageUrl} size="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-bold text-ink">{result.title}</span>
+                        <span className="block truncate text-xs text-muted">
+                          @{String(result.metadata.username ?? '')}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                {inviteSearch.trim().length >= 2 && !invitePeople.isLoading && !collectionItems(invitePeople.data).length ? (
+                  <p className="text-sm text-muted">No people found.</p>
+                ) : null}
+              </div>
               <Button
-                className="self-end"
                 onClick={() => invite.mutate()}
-                disabled={!inviteeId.trim()}
+                disabled={!selectedInvitee || invite.isPending}
               >
-                Invite
+                {invite.isPending ? 'Inviting…' : 'Invite selected person'}
               </Button>
             </div>
             <h3 className="mt-6 font-bold text-ink">Join requests</h3>

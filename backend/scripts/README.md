@@ -17,6 +17,16 @@ Run it from the repository root:
 npm run admin:create
 ```
 
+Before connecting to MongoDB, validate the temporary credentials without any
+database read or write:
+
+```text
+npm run admin:create -- --validate-only
+```
+
+Validation failures identify only the affected field and safe rule message; no
+password or other secret is printed.
+
 The script connects using the backend's existing `MONGO_URI`, `MONGO_DB_NAME`,
 and environment configuration. It uses the existing User model, credential
 normalization, and scrypt password hashing. The created account is `ACTIVE`,

@@ -25,11 +25,25 @@ describe('team feature boundaries', () => {
     expect(result.success).toBe(true);
   });
 
-  it('requires a team goal and category', () => {
+  it('accepts lightweight team creation with generated defaults', () => {
+    const result = teamCreate.safeParse({
+      name: 'Quick team',
+      category: 'Project',
+      visibility: 'PUBLIC',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.description).toBe('');
+      expect(result.data.goal).toBe('');
+      expect(result.data.tags).toEqual([]);
+      expect(result.data.lookingFor).toEqual([]);
+    }
+  });
+
+  it('requires a team name and category', () => {
     expect(
       teamCreate.safeParse({
         name: 'Incomplete team',
-        description: 'Missing required planning fields.',
         visibility: 'PUBLIC',
       }).success,
     ).toBe(false);

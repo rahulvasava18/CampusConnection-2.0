@@ -106,7 +106,7 @@ export function EventsPage({ onNavigate }: { onNavigate: (target: string) => voi
       createDescription="Create an event, workshop, competition, or hackathon."
       activityTitle="Upcoming / recent event activity"
       activityDescription="Events will appear here when event discovery is available."
-      createTarget="/events/create"
+      showCreateCard={false}
     />
   );
 }

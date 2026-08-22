@@ -86,3 +86,38 @@ export function clearAuthCookies(res: { append(name: string, value: string): voi
       }),
     );
 }
+
+export function setPasswordResetCookie(
+  res: { append(name: string, value: string): void },
+  token: string,
+): void {
+  const env = getEnv();
+  const sameSite =
+    env.COOKIE_SAME_SITE === 'strict' ? 'Strict' : env.COOKIE_SAME_SITE === 'none' ? 'None' : 'Lax';
+  res.append(
+    'Set-Cookie',
+    serializeCookie(env.passwordResetCookieName, token, {
+      httpOnly: true,
+      secure: env.COOKIE_SECURE,
+      sameSite,
+      path: '/',
+      maxAge: 10 * 60,
+    }),
+  );
+}
+
+export function clearPasswordResetCookie(res: { append(name: string, value: string): void }): void {
+  const env = getEnv();
+  const sameSite =
+    env.COOKIE_SAME_SITE === 'strict' ? 'Strict' : env.COOKIE_SAME_SITE === 'none' ? 'None' : 'Lax';
+  res.append(
+    'Set-Cookie',
+    serializeCookie(env.passwordResetCookieName, '', {
+      httpOnly: true,
+      secure: env.COOKIE_SECURE,
+      sameSite,
+      path: '/',
+      maxAge: 0,
+    }),
+  );
+}

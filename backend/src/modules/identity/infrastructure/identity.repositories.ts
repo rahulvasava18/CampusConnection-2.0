@@ -295,10 +295,12 @@ export class SessionRepository {
   public async revokeOthersForUser(
     userId: Types.ObjectId,
     currentSessionId: string,
+    session?: ClientSession,
   ): Promise<number> {
     const result = await SessionModel.updateMany(
       { userId, status: 'ACTIVE', _id: { $ne: currentSessionId } },
       { $set: { status: 'REVOKED', revokedAt: new Date() } },
+      session ? { session } : {},
     ).exec();
     return result.modifiedCount;
   }
@@ -308,6 +310,18 @@ export class SessionRepository {
       .sort({ createdAt: -1 })
       .limit(50)
       .exec();
+  }
+
+  public async findActiveForFamily(
+    userId: string,
+    familyId: string,
+  ): Promise<SessionDocument | null> {
+    return SessionModel.findOne({
+      userId,
+      familyId,
+      status: 'ACTIVE',
+      expiresAt: { $gt: new Date() },
+    }).exec();
   }
 
   public async revokeById(userId: Types.ObjectId, sessionId: string): Promise<boolean> {

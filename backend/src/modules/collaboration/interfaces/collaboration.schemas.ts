@@ -30,8 +30,8 @@ export const communityListQuery = paginationQuery
 export const communityCreate = z
   .object({
     name: z.string().trim().min(2).max(120),
-    slug,
-    description: z.string().trim().min(1).max(1000),
+    slug: slug.optional(),
+    description: z.string().trim().max(1000).default(''),
     category: z.string().trim().min(1).max(80),
     tags: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
     rules: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
@@ -52,8 +52,8 @@ export const communityMemberUpdate = z
 export const teamCreate = z
   .object({
     name: z.string().trim().min(2).max(120),
-    description: z.string().trim().min(1).max(1500),
-    goal: z.string().trim().min(1).max(1500),
+    description: z.string().trim().max(1500).default(''),
+    goal: z.string().trim().max(1500).default(''),
     category: z.string().trim().min(1).max(80),
     tags: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
     avatarUrl: z.string().url().max(500).optional(),
@@ -120,9 +120,9 @@ export const reportUpdate = z
 export const projectCreate = z
   .object({
     name: z.string().trim().min(2).max(140),
-    slug,
-    description: z.string().trim().min(1).max(2500),
-    objective: z.string().trim().min(1).max(1500),
+    slug: slug.optional(),
+    description: z.string().trim().max(2500).default(''),
+    objective: z.string().trim().max(1500).default(''),
     category: z.string().trim().min(1).max(80),
     tags: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
     ownerTeamId: objectId.optional(),
@@ -145,7 +145,7 @@ export const projectListQuery = paginationQuery
   })
   .strict();
 export const projectUpdate = projectCreate
-  .omit({ slug: true, ownerTeamId: true, teamId: true })
+  .omit({ slug: true })
   .partial()
   .strict();
 export const projectMemberCreate = z.object({ userId: objectId }).strict();
@@ -226,6 +226,7 @@ const eventFields = z.object({
   startAt: requiredDate,
   endAt: requiredDate,
   registrationDeadline: date,
+  registrationUrl: z.string().url().max(500).optional(),
   capacity: z.coerce.number().int().min(1).max(100000).optional(),
   registrationRequired: z.boolean().default(true),
   visibility: z.enum(['PUBLIC', 'CAMPUS', 'PRIVATE']),

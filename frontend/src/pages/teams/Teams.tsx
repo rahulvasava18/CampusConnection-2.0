@@ -7,6 +7,7 @@ import { collectionItems, apiErrorMessage, isRestrictedApiError } from '../../li
 import {
   getTeamInvitations,
   getTeams,
+  joinTeam,
   respondToTeamInvitation,
 } from '../../features/collaboration/collaboration.api';
 
@@ -27,6 +28,13 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['team-invitations'] });
       void queryClient.invalidateQueries({ queryKey: ['teams'] });
+    },
+  });
+  const join = useMutation({
+    mutationFn: (teamId: string) => joinTeam(teamId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['teams'] });
+      void queryClient.invalidateQueries({ queryKey: ['team'] });
     },
   });
   const items = collectionItems(teams.data);
@@ -150,8 +158,7 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
         {items.map((team) => (
           <Card
             key={team.id}
-            className="theme-team-card group cursor-pointer p-5 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"
-            onClick={() => onNavigate(`/teams/${team.id}`)}
+            className="theme-team-card group p-5 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"
           >
             <div className="flex items-start justify-between gap-3">
               <span className="rounded-xl bg-brand-50 p-2.5 text-brand-600">
@@ -177,6 +184,36 @@ export function Teams({ onNavigate }: { onNavigate: (target: string) => void }) 
               {team.tags?.slice(0, 5).map((tag) => (
                 <Badge key={tag}>{tag}</Badge>
               ))}
+            </div>
+            <div className="mt-5 flex flex-wrap gap-2">
+              {team.isMember ? (
+                <Button size="sm" onClick={() => onNavigate(`/teams/${team.id}`)}>
+                  Enter →
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => onNavigate(`/teams/${team.id}`)}
+                >
+                  More details →
+                </Button>
+              )}
+              {!team.isMember && team.visibility !== 'PRIVATE' ? (
+                team.membershipStatus === 'PENDING' ? (
+                  <Button size="sm" variant="ghost" disabled>
+                    Requested
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={() => join.mutate(team.id)}
+                    disabled={join.isPending && join.variables === team.id}
+                  >
+                    {join.isPending && join.variables === team.id ? 'Requesting…' : 'Join'}
+                  </Button>
+                )
+              ) : null}
             </div>
           </Card>
         ))}

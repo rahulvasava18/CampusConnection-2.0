@@ -31,6 +31,8 @@ import type { AdminService } from './modules/admin/application/admin.service';
 import type { AdminUserService } from './modules/admin/application/admin-user.service';
 import type { AdminControlService } from './modules/admin/application/admin-control.service';
 import type { AdminAnalyticsService } from './modules/admin/application/admin-analytics.service';
+import { createClubAdminRouter, createClubRouter } from './modules/club/interfaces/club.routes';
+import type { ClubService } from './modules/club/application/club.service';
 
 export interface AppDependencies {
   healthService?: HealthService;
@@ -40,6 +42,7 @@ export interface AppDependencies {
   adminUserService?: AdminUserService;
   adminControlService?: AdminControlService;
   adminAnalyticsService?: AdminAnalyticsService;
+  clubService?: ClubService;
 }
 
 export function createApp(dependencies: AppDependencies = {}): Express {
@@ -107,8 +110,10 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   apiRouter.use(createProfileRouter());
   apiRouter.use('/admin', createAdminRouter(dependencies.adminService, dependencies.adminUserService));
   apiRouter.use('/admin', createAdminControlRouter(dependencies.adminControlService, dependencies.adminAnalyticsService));
+  apiRouter.use('/admin', createClubAdminRouter(dependencies.clubService));
   apiRouter.use(createSocialRouter());
   apiRouter.use(createCollaborationRouter());
+  apiRouter.use(createClubRouter(dependencies.clubService));
   app.use('/api', apiRouter);
 
   app.use(createHealthRouter(healthService));

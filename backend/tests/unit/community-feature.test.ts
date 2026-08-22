@@ -22,6 +22,20 @@ describe('community feature boundaries', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts lightweight creation without advanced metadata', () => {
+    const result = communityCreate.safeParse({
+      name: 'Campus Builders',
+      category: 'Technology',
+      privacy: 'PRIVATE',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.description).toBe('');
+      expect(result.data.tags).toEqual([]);
+      expect(result.data.rules).toEqual([]);
+    }
+  });
+
   it('rejects empty discussion and reply content', () => {
     expect(
       discussionCreate.safeParse({ title: '', content: '', type: 'DISCUSSION', tags: [] }).success,

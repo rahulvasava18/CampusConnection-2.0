@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { RecommendationItem } from '@campusconnection/shared';
-import { ArrowUpRight, CalendarDays, Check, Sparkles, UserRound, X } from 'lucide-react';
+import { ArrowUpRight, BadgeCheck, CalendarDays, Check, Sparkles, UserRound, X } from 'lucide-react';
 import {
   getRecommendations,
   sendRecommendationFeedback,
@@ -219,6 +219,23 @@ function UpcomingEvent({ onNavigate }: { onNavigate: HomeNavigation }) {
   );
 }
 
+function ClubPrompt({ onNavigate }: { onNavigate: HomeNavigation }) {
+  return (
+    <Card className="p-4 sm:p-5">
+      <RailHeader icon={BadgeCheck} eyebrow="Workspace / Clubs" title="Build something official." />
+      <p className="mt-5 text-sm leading-6 text-muted">
+        Create your club, bring students together, and get verified by CampusConnection.
+      </p>
+      <div className="mt-4 grid h-24 place-items-center rounded-xl bg-[var(--surface-secondary)] text-brand-600">
+        <BadgeCheck className="h-11 w-11" aria-hidden="true" />
+      </div>
+      <Button size="sm" variant="secondary" className="mt-4 w-full" onClick={() => onNavigate('clubs')}>
+        Create a club <ArrowUpRight className="h-4 w-4" />
+      </Button>
+    </Card>
+  );
+}
+
 function ForYou({ onNavigate }: { onNavigate: HomeNavigation }) {
   const recommendations = useInfiniteQuery({
     queryKey: ['home-recommendations', 'PROJECTS'],
@@ -288,6 +305,7 @@ export function HomeRightRail({ onNavigate }: { onNavigate: HomeNavigation }) {
     <aside className="space-y-5 xl:sticky xl:top-24">
       <PostEntry onNavigate={onNavigate} />
       <PeopleSuggestions onNavigate={onNavigate} />
+      <ClubPrompt onNavigate={onNavigate} />
       <UpcomingEvent onNavigate={onNavigate} />
       <ForYou onNavigate={onNavigate} />
     </aside>

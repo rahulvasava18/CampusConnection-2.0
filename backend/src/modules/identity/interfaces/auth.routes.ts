@@ -4,13 +4,20 @@ import type { AccountDeletionService } from '../application/account-deletion.ser
 import { validateRequest } from '../../../shared/validation/validate';
 import { requireAuth } from '../security/auth.middleware';
 import { requireCsrf } from '../security/csrf.middleware';
-import { clearAuthCookies, parseCookies, setAuthCookies, setCsrfCookie } from '../../../shared/http/cookies';
+import {
+  clearAuthCookies,
+  parseCookies,
+  setAuthCookies,
+  setCsrfCookie,
+  setPasswordResetCookie,
+} from '../../../shared/http/cookies';
 import { createOpaqueToken } from '../security/token.service';
 import { getEnv } from '../../../config/env';
 import { AppError } from '../../../shared/errors/app-error';
 import {
   loginSchema,
   googleExchangeSchema,
+  googlePasswordRecoveryExchangeSchema,
   googleOnboardingSchema,
   googleUsernameAvailabilitySchema,
   profileUpdateSchema,
@@ -75,18 +82,26 @@ export function createAuthRouter(
       next(error);
     }
   });
+  router.post('/google/password-recovery/start', requireAuth, requireCsrf, async (req, res, next) => {
+    try {
+      res.status(200).json({
+        data: { authorizationUrl: await authService.startPasswordRecoveryGoogle(requireRequestAuth(req)) },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
   router.get('/google/callback', async (req, res) => {
     const code = typeof req.query.code === 'string' ? req.query.code : undefined;
     const state = typeof req.query.state === 'string' ? req.query.state : undefined;
-    const frontendUrl = getEnv().FRONTEND_URL.replace(/\/$/, '');
     if (!code || !state) {
-      res.redirect(303, `${frontendUrl}/login?googleError=1`);
+      res.redirect(303, await authService.googleCallbackFailureRedirect(state));
       return;
     }
     try {
       res.redirect(303, await authService.completeGoogleCallback(code, state));
     } catch {
-      res.redirect(303, `${frontendUrl}/login?googleError=1`);
+      res.redirect(303, await authService.googleCallbackFailureRedirect(state));
     }
   });
   router.post(
@@ -100,6 +115,22 @@ export function createAuthRouter(
           return;
         }
         res.status(200).json(sendSession(res, result));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+  router.post(
+    '/google/password-recovery/exchange',
+    validateRequest(googlePasswordRecoveryExchangeSchema, 'body'),
+    async (req, res, next) => {
+      try {
+        const result = await authService.exchangePasswordRecoveryGoogleCode(
+          req.body.code,
+          requestMeta(req),
+        );
+        setPasswordResetCookie(res, result.resetToken);
+        res.status(200).json({ data: { verified: true } });
       } catch (error) {
         next(error);
       }

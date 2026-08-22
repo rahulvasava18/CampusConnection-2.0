@@ -9,3 +9,4 @@ export * from './realtime';
 export * from './recommendations';
 export * from './notifications';
 export * from './profile';
+export * from './clubs';

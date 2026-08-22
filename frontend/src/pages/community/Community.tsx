@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Sparkles } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CommunityCard } from './components/CommunityCard';
 import { Button, Card, EmptyState, ErrorState, Field, LoadingState } from '../../components/ui';
@@ -47,7 +47,11 @@ export function Communities({ onNavigate }: { onNavigate: (path: string) => void
   const invitationAction = useMutation({
     mutationFn: ({ id, accept }: { id: string; accept: boolean }) =>
       respondToCommunityInvitation(id, accept),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['community-invitations'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['community-invitations'] });
+      void queryClient.invalidateQueries({ queryKey: ['communities'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-communities'] });
+    },
   });
   const membership = useMutation({
     mutationFn: async ({ id, joined }: { id: string; joined: boolean }) => {
@@ -145,38 +149,6 @@ export function Communities({ onNavigate }: { onNavigate: (path: string) => void
               />
             ))}
           </div>
-          <div className="flex items-center justify-between pt-3">
-            <h2 className="type-display text-xl font-bold text-ink">Active discussions</h2>
-            <span className="text-xs font-semibold text-muted">
-              From your accessible communities
-            </span>
-          </div>
-          {activeDiscussions.isLoading ? <LoadingState label="Loading discussions" /> : null}
-          {activeDiscussions.error ? (
-            <ErrorState
-              message={apiErrorMessage(
-                activeDiscussions.error,
-                'Active discussions could not be loaded.',
-              )}
-            />
-          ) : null}
-          {!activeDiscussions.isLoading &&
-          !activeDiscussions.error &&
-          discussionItems.length === 0 ? (
-            <EmptyState
-              title="No active discussions yet"
-              description="Join a community and start a conversation when you are ready."
-            />
-          ) : null}
-          <div className="grid gap-3">
-            {discussionItems.map((discussion) => (
-              <DiscussionCard
-                key={discussion.id}
-                discussion={discussion}
-                onOpen={() => onNavigate(`/discussions/${discussion.id}`)}
-              />
-            ))}
-          </div>
         </div>
         <aside className="space-y-5">
           {collectionItems(invitations.data).length ? (
@@ -213,22 +185,6 @@ export function Communities({ onNavigate }: { onNavigate: (path: string) => void
               </div>
             </Card>
           ) : null}
-          <Card className="bg-gradient-to-br from-brand-50 to-cyan/10 p-5">
-            <Sparkles className="h-5 w-5 text-brand-600" />
-            <h2 className="type-display mt-4 text-lg font-bold text-ink">
-              Make a space for your interest.
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Bring together the people, questions, and resources that should stay connected.
-            </p>
-            <Button
-              className="mt-4 w-full"
-              variant="secondary"
-              onClick={() => onNavigate('/communities/create')}
-            >
-              Create community
-            </Button>
-          </Card>
           <Card className="p-5 ">
             <h2 className="type-display text-lg font-bold text-ink">My communities</h2>
             {mine.isLoading ? <LoadingState label="Loading your spaces" /> : null}
@@ -250,6 +206,37 @@ export function Communities({ onNavigate }: { onNavigate: (path: string) => void
                     {community.memberCount ?? 0} members
                   </span>
                 </button>
+              ))}
+            </div>
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="type-display text-lg font-bold text-ink">Active discussions</h2>
+              <span className="text-xs font-semibold text-muted">Accessible spaces</span>
+            </div>
+            {activeDiscussions.isLoading ? <LoadingState label="Loading discussions" /> : null}
+            {activeDiscussions.error ? (
+              <ErrorState
+                message={apiErrorMessage(
+                  activeDiscussions.error,
+                  'Active discussions could not be loaded.',
+                )}
+              />
+            ) : null}
+            {!activeDiscussions.isLoading &&
+            !activeDiscussions.error &&
+            discussionItems.length === 0 ? (
+              <p className="mt-3 text-sm leading-6 text-muted">
+                Join a community and start a conversation when you are ready.
+              </p>
+            ) : null}
+            <div className="mt-3 grid gap-3">
+              {discussionItems.map((discussion) => (
+                <DiscussionCard
+                  key={discussion.id}
+                  discussion={discussion}
+                  onOpen={() => onNavigate(`/discussions/${discussion.id}`)}
+                />
               ))}
             </div>
           </Card>

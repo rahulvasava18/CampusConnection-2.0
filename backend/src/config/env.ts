@@ -129,6 +129,7 @@ const envSchema = z.object({
 export type AppEnv = z.infer<typeof envSchema> & {
   corsOrigins: string[];
   refreshCookieName: string;
+  passwordResetCookieName: string;
 };
 
 let cachedEnv: AppEnv | undefined;
@@ -148,6 +149,8 @@ export function getEnv(): AppEnv {
       parsed.NODE_ENV === 'production'
         ? '__Host-cc_refresh'
         : (parsed.REFRESH_COOKIE_NAME ?? 'cc_refresh'),
+    passwordResetCookieName:
+      parsed.NODE_ENV === 'production' ? '__Host-cc_password_reset' : 'cc_password_reset',
   };
   return cachedEnv;
 }

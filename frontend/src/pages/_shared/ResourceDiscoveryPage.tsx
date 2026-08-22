@@ -32,6 +32,7 @@ type ResourceDiscoveryPageProps = {
   activityTitle: string;
   activityDescription: string;
   createTarget?: string;
+  showCreateCard?: boolean;
 };
 
 function ResourceCard({ item, icon: Icon }: { item: ResourceDiscoveryItem; icon: LucideIcon }) {
@@ -133,6 +134,7 @@ export function ResourceDiscoveryPage({
   activityTitle,
   activityDescription,
   createTarget,
+  showCreateCard = true,
 }: ResourceDiscoveryPageProps) {
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState(filters[0] ?? 'All');
@@ -216,12 +218,12 @@ export function ResourceDiscoveryPage({
           />
         </div>
         <aside className="space-y-5">
-          <CreateResourceCard
+          {showCreateCard ? <CreateResourceCard
             title={createTitle}
             label={createLabel}
             description={createDescription}
             {...(create ? { onCreate: create } : {})}
-          />
+          /> : null}
           <MyResourceCard
             resourcePlural={resourcePlural}
             items={myItems}

@@ -1,4 +1,5 @@
 import { apiRequest } from '../auth/auth.api';
+import type { ApiCollection, ClubStatus } from '@campusconnection/shared';
 
 export type AdminStatsRange = '7d' | '30d' | '90d' | '6m' | '1y';
 
@@ -210,6 +211,10 @@ export interface AdminModerationContentItem { id: string; type: AdminContentType
 export interface AdminContentList { items: AdminModerationContentItem[]; pagination: { page: number; limit: number; total: number; totalPages: number } }
 export const getAdminContent = (type: AdminContentType, input: { search?: string; status?: string; page?: number; limit?: number } = {}) => apiRequest<AdminContentList>(`/admin/content/${type}?${queryString(input)}`);
 export const moderateAdminContent = (type: AdminContentType, contentId: string, input: { action: 'HIDE' | 'DELETE' | 'RESTORE' | 'DISABLE' | 'CANCEL'; reason: string; confirmation?: string }) => apiRequest<{ id: string; status: string; action: string }>(`/admin/content/${type}/${contentId}/moderate`, { method: 'POST', body: JSON.stringify(input) });
+
+export interface AdminClubItem { id: string; name: string; slug: string; category: string; privacy: 'PUBLIC' | 'PRIVATE'; status: ClubStatus; ownerId: string; description: string; contactEmail: string; rejectionReason?: string; createdAt: string; updatedAt: string }
+export const getAdminClubs = (status?: ClubStatus) => apiRequest<ApiCollection<AdminClubItem>>(`/admin/clubs?limit=100${status ? `&status=${status}` : ''}`);
+export const reviewAdminClub = (clubId: string, status: Exclude<ClubStatus, 'PENDING'>, reason?: string) => apiRequest<ApiCollection<AdminClubItem>>(`/admin/clubs/${clubId}/status`, { method: 'PATCH', body: JSON.stringify({ status, ...(reason ? { reason } : {}) }) });
 
 export interface AdminAuditItem { id: string; action: string; targetType?: string; targetId?: string; reason?: string; metadata: Record<string, unknown>; actor?: { id: string; displayName: string; username: string; avatarUrl?: string }; createdAt: string }
 export interface AdminAuditList { items: AdminAuditItem[]; pagination: { page: number; limit: number; total: number; totalPages: number } }

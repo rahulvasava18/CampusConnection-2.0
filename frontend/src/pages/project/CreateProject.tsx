@@ -4,85 +4,48 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { createProject, getTeams } from '../../features/collaboration/collaboration.api';
-import { collectionItems } from '../../lib/api-state';
-import { apiErrorMessage } from '../../lib/api-state';
+import { collectionItems, apiErrorMessage } from '../../lib/api-state';
 import { Button, Card, ErrorState, Field, TextareaField } from '../../components/ui';
 import { CreateResourceLayout } from '../_shared/CreateResourceLayout';
 
-function optionalUrl() {
-  return z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.string().url('Enter a valid URL.').max(500).optional(),
-  );
-}
-
 const projectCreateSchema = z.object({
   name: z.string().trim().min(2, 'Project name is required.').max(140),
-  slug: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .min(3, 'Slug must be at least 3 characters.')
-    .max(90)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use lowercase letters, numbers, and hyphens.'),
-  description: z.string().trim().min(1, 'Project description is required.').max(2500),
-  objective: z.string().trim().min(1, 'Project objective is required.').max(1500),
+  description: z.string().trim().max(2500).optional(),
   category: z.string().trim().min(1, 'Project category is required.').max(80),
-  tags: z.string().optional(),
   lookingFor: z.string().optional(),
-  deadline: z.string().optional(),
   teamId: z.string().optional(),
   visibility: z.enum(['PUBLIC', 'CAMPUS', 'PRIVATE']),
-  technologies: z.string().optional(),
-  repositoryUrl: optionalUrl(),
-  demoUrl: optionalUrl(),
 });
 
-type ProjectCreateInput = z.input<typeof projectCreateSchema>;
-type ProjectCreateForm = z.output<typeof projectCreateSchema>;
+type ProjectCreateInput = z.infer<typeof projectCreateSchema>;
 
 export function CreateProject({ onNavigate }: { onNavigate: (target: string) => void }) {
   const queryClient = useQueryClient();
   const teams = useQuery({ queryKey: ['teams'], queryFn: () => getTeams() });
-  const form = useForm<ProjectCreateInput, unknown, ProjectCreateForm>({
+  const form = useForm<ProjectCreateInput>({
     resolver: zodResolver(projectCreateSchema),
     defaultValues: {
       name: '',
-      slug: '',
       description: '',
-      objective: '',
       category: 'Technology',
-      tags: '',
       lookingFor: '',
-      deadline: '',
       teamId: '',
       visibility: 'PUBLIC',
-      technologies: '',
-      repositoryUrl: '',
-      demoUrl: '',
     },
   });
   const mutation = useMutation({
-    mutationFn: (input: ProjectCreateForm) => {
-      const { technologies, tags, lookingFor, deadline, teamId, ...base } = input;
-      return createProject({
-        ...base,
-        technologies: (technologies ?? '')
+    mutationFn: (input: ProjectCreateInput) =>
+      createProject({
+        name: input.name,
+        description: input.description ?? '',
+        category: input.category,
+        lookingFor: (input.lookingFor ?? '')
           .split(',')
           .map((value) => value.trim())
           .filter(Boolean),
-        tags: (tags ?? '')
-          .split(',')
-          .map((value) => value.trim())
-          .filter(Boolean),
-        lookingFor: (lookingFor ?? '')
-          .split(',')
-          .map((value) => value.trim())
-          .filter(Boolean),
-        ...(deadline ? { deadline: new Date(`${deadline}T23:59:59.000Z`).toISOString() } : {}),
-        ...(teamId ? { teamId } : {}),
-      });
-    },
+        ...(input.teamId ? { teamId: input.teamId } : {}),
+        visibility: input.visibility,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['projects'] });
       onNavigate('/projects');
@@ -108,23 +71,11 @@ export function CreateProject({ onNavigate }: { onNavigate: (target: string) => 
             error={form.formState.errors.name?.message}
             {...form.register('name')}
           />
-          <Field
-            label="Slug"
-            placeholder="campus-marketplace"
-            error={form.formState.errors.slug?.message}
-            {...form.register('slug')}
-          />
           <TextareaField
-            label="Description"
+            label="Description (optional)"
             placeholder="What are you building?"
             error={form.formState.errors.description?.message}
             {...form.register('description')}
-          />
-          <TextareaField
-            label="Objective"
-            placeholder="What outcome will this project deliver?"
-            error={form.formState.errors.objective?.message}
-            {...form.register('objective')}
           />
           <Field
             label="Category"
@@ -133,22 +84,10 @@ export function CreateProject({ onNavigate }: { onNavigate: (target: string) => 
             {...form.register('category')}
           />
           <Field
-            label="Tags (comma separated, optional)"
-            placeholder="AI, campus, navigation"
-            {...form.register('tags')}
-          />
-          <Field
-            label="Technologies (comma separated, optional)"
-            placeholder="React, TypeScript, MongoDB"
-            error={form.formState.errors.technologies?.message}
-            {...form.register('technologies')}
-          />
-          <Field
-            label="Looking for (comma separated, optional)"
+            label="Looking for (optional)"
             placeholder="ML engineer, designer"
             {...form.register('lookingFor')}
           />
-          <Field label="Deadline (optional)" type="date" {...form.register('deadline')} />
           <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
             Associated Team (optional)
             <select
@@ -163,20 +102,6 @@ export function CreateProject({ onNavigate }: { onNavigate: (target: string) => 
               ))}
             </select>
           </label>
-          <Field
-            label="Repository URL (optional)"
-            type="url"
-            placeholder="https://github.com/..."
-            error={form.formState.errors.repositoryUrl?.message}
-            {...form.register('repositoryUrl')}
-          />
-          <Field
-            label="Demo URL (optional)"
-            type="url"
-            placeholder="https://..."
-            error={form.formState.errors.demoUrl?.message}
-            {...form.register('demoUrl')}
-          />
           <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
             Visibility
             <select
@@ -185,13 +110,11 @@ export function CreateProject({ onNavigate }: { onNavigate: (target: string) => 
             >
               <option value="PUBLIC">Public - discoverable by everyone</option>
               <option value="CAMPUS">Campus - visible to campus members</option>
-              <option value="PRIVATE">Private - membership required</option>
+              <option value="PRIVATE">Private - invitation only</option>
             </select>
           </label>
           {mutation.error ? (
-            <ErrorState
-              message={apiErrorMessage(mutation.error, 'Project could not be created.')}
-            />
+            <ErrorState message={apiErrorMessage(mutation.error, 'Project could not be created.')} />
           ) : null}
           <Button type="submit" size="lg" disabled={mutation.isPending}>
             {mutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}

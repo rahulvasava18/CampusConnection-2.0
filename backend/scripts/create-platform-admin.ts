@@ -32,7 +32,7 @@ export async function provisionPlatformAdmin(
   const email = normalizeEmail(input.email);
   const username = normalizeUsername(input.username);
 
-  validateCredentials(email, username, input.password);
+  validatePlatformAdminCredentials(email, username, input.password);
 
   const existingEmail = await userModel.findOne({
     $or: [{ emailNormalized: email }, { email }],
@@ -83,7 +83,11 @@ export async function provisionPlatformAdmin(
   return { status: 'created', email, username, role: PLATFORM_ADMIN_ROLE };
 }
 
-function validateCredentials(email: string, username: string, password: string): void {
+export function validatePlatformAdminCredentials(
+  email: string,
+  username: string,
+  password: string,
+): void {
   if (!email) throw new PlatformAdminProvisioningError('PLATFORM_ADMIN_EMAIL is required.');
   if (!username) throw new PlatformAdminProvisioningError('PLATFORM_ADMIN_USERNAME is required.');
   if (!password) throw new PlatformAdminProvisioningError('PLATFORM_ADMIN_PASSWORD is required.');
@@ -94,8 +98,14 @@ function validateCredentials(email: string, username: string, password: string):
     password,
   });
   if (!validation.success) {
+    const issues = validation.error.issues
+      .map((issue) => {
+        const field = issue.path.join('.') || 'credentials';
+        return `- ${field}: ${issue.message}`;
+      })
+      .join('\n');
     throw new PlatformAdminProvisioningError(
-      'Platform administrator credentials do not satisfy the existing signup validation rules.',
+      `Platform administrator provisioning failed validation:\n${issues}`,
     );
   }
 }
@@ -113,11 +123,15 @@ async function main(): Promise<void> {
   try {
     console.log('Platform admin provisioning started.');
     const input = readInput();
-    validateCredentials(
+    validatePlatformAdminCredentials(
       normalizeEmail(input.email),
       normalizeUsername(input.username),
       input.password,
     );
+    if (process.argv.includes('--validate-only')) {
+      console.log('Platform administrator credentials passed existing signup validation.');
+      return;
+    }
     connectionAttempted = true;
     await connectMongo();
     console.log('Database connection successful.');

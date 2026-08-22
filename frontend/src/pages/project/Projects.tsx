@@ -1,13 +1,23 @@
 import { Search, FolderKanban } from 'lucide-react';
 import { useState } from 'react';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ProjectView } from '@campusconnection/shared';
-import { getProjectActivity, getProjects } from '../../features/collaboration/collaboration.api';
+import { getProjectActivity, getProjects, joinProject } from '../../features/collaboration/collaboration.api';
 import { collectionItems, apiErrorMessage, isRestrictedApiError } from '../../lib/api-state';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState } from '../../components/ui';
 import { CompactPageHeader, CompactPageTop } from '../../components/PageHeader';
 
-function ProjectCard({ project, onOpen }: { project: ProjectView; onOpen: () => void }) {
+function ProjectCard({
+  project,
+  onOpen,
+  onJoin,
+  joinPending,
+}: {
+  project: ProjectView;
+  onOpen: () => void;
+  onJoin: () => void;
+  joinPending: boolean;
+}) {
   const progress = project.progressPercent ?? 0;
   return (
     <Card
@@ -44,11 +54,26 @@ function ProjectCard({ project, onOpen }: { project: ProjectView; onOpen: () => 
         ))}
         {project.category ? <Badge tone="neutral">{project.category}</Badge> : null}
       </div>
+      <div className="mt-5 flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
+        <Button size="sm" variant="secondary" onClick={onOpen}>
+          {project.isMember ? 'Enter project' : 'More info'}
+        </Button>
+        {!project.isMember && project.membershipStatus === 'PENDING' ? (
+          <Button size="sm" variant="ghost" disabled>
+            Requested
+          </Button>
+        ) : !project.isMember && project.visibility !== 'PRIVATE' ? (
+          <Button size="sm" onClick={onJoin} disabled={joinPending}>
+            {joinPending ? 'Requesting…' : 'Request to join'}
+          </Button>
+        ) : null}
+      </div>
     </Card>
   );
 }
 
 export function Projects({ onNavigate }: { onNavigate: (target: string) => void }) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All');
   const [category, setCategory] = useState('');
@@ -69,6 +94,13 @@ export function Projects({ onNavigate }: { onNavigate: (target: string) => void 
   const userProjects = items.filter(
     (project) => project.isMember || project.membershipRole === 'OWNER',
   );
+  const join = useMutation({
+    mutationFn: (projectId: string) => joinProject(projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects'] });
+      void queryClient.invalidateQueries({ queryKey: ['project'] });
+    },
+  });
 
   return (
     <div className="page-theme page-theme-projects space-y-6">
@@ -154,28 +186,11 @@ export function Projects({ onNavigate }: { onNavigate: (target: string) => void 
                 key={project.id}
                 project={project}
                 onOpen={() => onNavigate(`/projects/${project.id}`)}
+                onJoin={() => join.mutate(project.id)}
+                joinPending={join.isPending && join.variables === project.id}
               />
             ))}
           </div>
-          <Card className="p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="type-display text-lg font-bold text-ink">Recent project activity</h2>
-              <Badge tone="neutral">Live</Badge>
-            </div>
-            {activity.length ? (
-              <div className="mt-4 space-y-3">
-                {activity.map((entry) => (
-                  <p key={entry.id} className="text-sm text-muted">
-                    {entry.message}
-                  </p>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-muted">
-                Activity will appear as project work progresses.
-              </p>
-            )}
-          </Card>
         </div>
         <aside className="space-y-5">
           <Card className="p-5">
@@ -202,18 +217,24 @@ export function Projects({ onNavigate }: { onNavigate: (target: string) => void 
               </p>
             )}
           </Card>
-          <Card className="bg-gradient-to-br from-brand-50 to-cyan/10 p-5">
-            <h2 className="type-display text-lg font-bold text-ink">Give your project a home.</h2>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Organize the work, people, and ideas behind what you are building.
-            </p>
-            <Button
-              className="mt-4 w-full"
-              variant="secondary"
-              onClick={() => onNavigate('/projects/create')}
-            >
-              Create project
-            </Button>
+          <Card className="p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="type-display text-lg font-bold text-ink">Recent project activity</h2>
+              <Badge tone="neutral">Live</Badge>
+            </div>
+            {activity.length ? (
+              <div className="mt-4 space-y-3">
+                {activity.map((entry) => (
+                  <p key={entry.id} className="text-sm text-muted">
+                    {entry.message}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm leading-6 text-muted">
+                Activity will appear as project work progresses.
+              </p>
+            )}
           </Card>
         </aside>
       </div>

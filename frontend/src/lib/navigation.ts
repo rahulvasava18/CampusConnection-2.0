@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  BadgeCheck,
   FolderKanban,
   Home,
   MessageCircle,
@@ -15,6 +16,11 @@ export type RouteId =
   | 'home'
   | 'search'
   | 'communities'
+  | 'clubs'
+  | 'clubCreate'
+  | 'clubDetail'
+  | 'clubManage'
+  | 'clubEventCreate'
   | 'communityCreate'
   | 'communityDetail'
   | 'discussionCreate'
@@ -33,7 +39,6 @@ export type RouteId =
   | 'teamDetail'
   | 'projectCreate'
   | 'projectDetail'
-  | 'eventCreate'
   | 'eventDetail'
   | 'admin'
   | 'adminUsers'
@@ -45,6 +50,7 @@ export type RouteId =
   | 'adminComments'
   | 'adminTeams'
   | 'adminCommunities'
+  | 'adminClubs'
   | 'adminEvents'
   | 'adminModeration'
   | 'adminAuditLogs'
@@ -62,6 +68,8 @@ export const routePaths: Partial<Record<RouteId, string>> = {
   home: '/home',
   search: '/search',
   communities: '/communities',
+  clubs: '/clubs',
+  clubCreate: '/clubs/create',
   messages: '/messages',
   notifications: '/notifications',
   recommendations: '/for-you',
@@ -80,6 +88,7 @@ export const routePaths: Partial<Record<RouteId, string>> = {
   adminComments: '/admin/comments',
   adminTeams: '/admin/teams',
   adminCommunities: '/admin/communities',
+  adminClubs: '/admin/clubs',
   adminEvents: '/admin/events',
   adminModeration: '/admin/moderation',
   adminAuditLogs: '/admin/audit-logs',
@@ -97,6 +106,7 @@ export const primaryNav: NavItem[] = [
 
 export const workspaceNav: NavItem[] = [
   { id: 'communities', label: 'Communities ', icon: Network },
+  { id: 'clubs', label: 'Clubs', icon: BadgeCheck },
   { id: 'teams', label: 'Teams', icon: Users },
   { id: 'projects', label: 'Projects', icon: FolderKanban },
   { id: 'events', label: 'Events', icon: CalendarDays },
@@ -108,9 +118,12 @@ export function routeFromPath(pathname: string): RouteId {
   if (cleanPath === '/hackathons') return 'events';
   if (cleanPath === '/collaboration') return 'communities';
   if (cleanPath === '/communities/create') return 'communityCreate';
+  if (cleanPath === '/clubs/create') return 'clubCreate';
+  if (/^\/clubs\/[^/]+\/events\/create$/.test(cleanPath)) return 'clubEventCreate';
+  if (/^\/clubs\/[^/]+\/manage$/.test(cleanPath)) return 'clubManage';
+  if (/^\/clubs\/[^/]+$/.test(cleanPath)) return 'clubDetail';
   if (cleanPath === '/teams/create') return 'teamCreate';
   if (cleanPath === '/projects/create') return 'projectCreate';
-  if (cleanPath === '/events/create') return 'eventCreate';
   if (/^\/communities\/[^/]+\/discussions\/create$/.test(cleanPath)) return 'discussionCreate';
   if (/^\/discussions\/[^/]+$/.test(cleanPath)) return 'discussionDetail';
   if (/^\/communities\/[^/]+$/.test(cleanPath)) return 'communityDetail';
@@ -127,6 +140,7 @@ export function routeFromPath(pathname: string): RouteId {
   if (cleanPath === '/admin/comments') return 'adminComments';
   if (cleanPath === '/admin/teams') return 'adminTeams';
   if (cleanPath === '/admin/communities') return 'adminCommunities';
+  if (cleanPath === '/admin/clubs') return 'adminClubs';
   if (cleanPath === '/admin/events') return 'adminEvents';
   if (cleanPath === '/admin/moderation') return 'adminModeration';
   if (cleanPath === '/admin/audit-logs') return 'adminAuditLogs';

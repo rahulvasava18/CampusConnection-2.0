@@ -3,8 +3,10 @@ import { AppError } from '../../../shared/errors/app-error';
 import { validateRequest } from '../../../shared/validation/validate';
 import { requireAuth } from '../../identity/security/auth.middleware';
 import { requireCsrf } from '../../identity/security/csrf.middleware';
+import { getEnv } from '../../../config/env';
+import { clearPasswordResetCookie, parseCookies } from '../../../shared/http/cookies';
 import { SettingsService } from '../application/settings.service';
-import { passwordUpdate, settingsUpdate } from './settings.schemas';
+import { passwordRecoveryUpdate, passwordUpdate, settingsUpdate } from './settings.schemas';
 
 function context(req: Request) {
   if (!req.auth) throw new AppError('AUTHENTICATION_REQUIRED', 'Authentication is required.', 401);
@@ -42,6 +44,26 @@ export function createSettingsRouter(service = new SettingsService()): Router {
         res.json({
           data: await service.setPassword(context(req), req.body, req.correlationId),
         });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+  router.post(
+    '/settings/password/recovery',
+    requireCsrf,
+    validateRequest(passwordRecoveryUpdate, 'body'),
+    async (req, res, next) => {
+      try {
+        const resetToken = parseCookies(req.header('cookie'))[getEnv().passwordResetCookieName];
+        const result = await service.setPasswordWithRecovery(
+          context(req),
+          req.body,
+          resetToken,
+          req.correlationId,
+        );
+        clearPasswordResetCookie(res);
+        res.json({ data: result });
       } catch (error) {
         next(error);
       }

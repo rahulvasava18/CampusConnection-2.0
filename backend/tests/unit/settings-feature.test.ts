@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { settingsUpdate } from '../../src/modules/settings/interfaces/settings.schemas';
+import {
+  passwordRecoveryUpdate,
+  settingsUpdate,
+} from '../../src/modules/settings/interfaces/settings.schemas';
 
 describe('settings validation', () => {
   it('accepts supported privacy and notification preferences', () => {
@@ -22,6 +25,28 @@ describe('settings validation', () => {
     expect(
       settingsUpdate.safeParse({
         preferences: { notifications: { email: true } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires matching strong passwords for Google recovery without accepting a current password', () => {
+    expect(
+      passwordRecoveryUpdate.safeParse({
+        newPassword: 'new-secure-password',
+        confirmPassword: 'new-secure-password',
+      }).success,
+    ).toBe(true);
+    expect(
+      passwordRecoveryUpdate.safeParse({
+        currentPassword: 'old-password',
+        newPassword: 'new-secure-password',
+        confirmPassword: 'new-secure-password',
+      }).success,
+    ).toBe(false);
+    expect(
+      passwordRecoveryUpdate.safeParse({
+        newPassword: 'new-secure-password',
+        confirmPassword: 'different-password',
       }).success,
     ).toBe(false);
   });
