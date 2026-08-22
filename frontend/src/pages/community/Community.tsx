@@ -3,7 +3,8 @@ import { ChevronRight, Network, Search } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CommunityCard } from './components/CommunityCard';
 import { Button, Card, EmptyState, ErrorState, Field, LoadingState } from '../../components/ui';
-import { CompactPageHeader, CompactPageTop } from '../../components/PageHeader';
+import { CompactPageTop } from '../../components/PageHeader';
+import { WorkspaceCreateCard } from '../../components/WorkspaceCreateCard';
 import { apiErrorMessage, collectionItems } from '../../lib/api-state';
 import {
   getActiveDiscussions,
@@ -103,11 +104,9 @@ export function Communities({ onNavigate }: { onNavigate: (path: string) => void
           </Card>
         }
         header={
-          <CompactPageHeader
-            eyebrow="Workspace / Communities"
-            title="Find your campus spaces."
-            description="Discover communities built around interests, questions, and shared work."
-            action={<Button onClick={() => onNavigate('/communities/create')}>Create community</Button>}
+          <WorkspaceCreateCard
+            kind="communities"
+            onAction={() => onNavigate('/communities/create')}
           />
         }
       />

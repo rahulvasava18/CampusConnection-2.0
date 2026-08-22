@@ -5,7 +5,8 @@ import type { ProjectView } from '@campusconnection/shared';
 import { getProjectActivity, getProjects, joinProject } from '../../features/collaboration/collaboration.api';
 import { collectionItems, apiErrorMessage, isRestrictedApiError } from '../../lib/api-state';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState } from '../../components/ui';
-import { CompactPageHeader, CompactPageTop } from '../../components/PageHeader';
+import { CompactPageTop } from '../../components/PageHeader';
+import { WorkspaceCreateCard } from '../../components/WorkspaceCreateCard';
 
 function ProjectCard({
   project,
@@ -148,12 +149,7 @@ export function Projects({ onNavigate }: { onNavigate: (target: string) => void 
           </Card>
         }
         header={
-          <CompactPageHeader
-            eyebrow="Workspace / Projects"
-            title="Make progress visible."
-            description="Explore what campus builders are developing, researching, and completing."
-            action={<Button onClick={() => onNavigate('/projects/create')}>Create project</Button>}
-          />
+          <WorkspaceCreateCard kind="projects" onAction={() => onNavigate('/projects/create')} />
         }
       />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
