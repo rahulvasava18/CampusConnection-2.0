@@ -68,6 +68,8 @@ const defaultPreferences: UserPreferences = {
 };
 
 const passwordRecoveryTimeoutMs = 120_000;
+const passwordRecoveryPopupName = 'campusconnection-password-recovery';
+const passwordRecoveryPopupFeatures = 'popup,width=520,height=720';
 
 const settingsNav: Array<{ id: string; label: string; icon: typeof Bell }> = [
   { id: 'account', label: 'Account', icon: Users },
@@ -208,8 +210,8 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
     }
     const popup = window.open(
       'about:blank',
-      'campusconnection-password-recovery',
-      'popup,width=520,height=720',
+      passwordRecoveryPopupName,
+      passwordRecoveryPopupFeatures,
     );
     if (!popup) {
       setRecoveryError('Your browser blocked the Google verification window. Allow popups and try again.');
@@ -219,7 +221,18 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
     setRecoveryStatus('starting');
     void startGooglePasswordRecovery()
       .then(({ authorizationUrl }) => {
-        popup.location.assign(authorizationUrl);
+        const authorizedPopup = window.open(
+          authorizationUrl,
+          passwordRecoveryPopupName,
+          passwordRecoveryPopupFeatures,
+        );
+        if (!authorizedPopup) {
+          recoveryPopup.current = null;
+          setRecoveryStatus('idle');
+          setRecoveryError('Unable to open the Google verification window. Please try again.');
+          return;
+        }
+        recoveryPopup.current = authorizedPopup;
         setRecoveryStatus('waiting');
       })
       .catch((error) => {
