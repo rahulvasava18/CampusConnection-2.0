@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../auth/auth.store';
 import { getFeed } from './social.api';
 import { PostCard } from './components/PostCard';
 import { Button, EmptyState, ErrorState, RestrictedState } from '../../components/ui';
 import { apiErrorMessage, isRestrictedApiError, paginatedItems } from '../../lib/api-state';
+import { AdminReportDialog } from '../../pages/admin/AdminReportDialog';
 
 export function SocialHome({ onNavigate }: { onNavigate?: (target: string) => void }) {
+  const [reportTarget, setReportTarget] = useState<{ type: 'POST' | 'COMMENT'; id: string } | null>(null);
   const feed = useInfiniteQuery({
     queryKey: ['feed'],
     queryFn: ({ pageParam }) => getFeed(pageParam, 'chronological'),
@@ -37,7 +40,13 @@ export function SocialHome({ onNavigate }: { onNavigate?: (target: string) => vo
       ) : null}
       <div className="grid gap-4">
         {feedItems.map((item) => (
-          <PostCard key={item.id} post={item} {...(onNavigate ? { onNavigate } : {})} />
+          <PostCard
+            key={item.id}
+            post={item}
+            {...(onNavigate ? { onNavigate } : {})}
+            onReport={() => setReportTarget({ type: 'POST', id: item.id })}
+            onReportComment={(commentId) => setReportTarget({ type: 'COMMENT', id: commentId })}
+          />
         ))}
       </div>
       {feed.hasNextPage ? (
@@ -50,6 +59,7 @@ export function SocialHome({ onNavigate }: { onNavigate?: (target: string) => vo
           {feed.isFetchingNextPage ? 'Loading…' : 'Load more updates'}
         </Button>
       ) : null}
+      {reportTarget ? <AdminReportDialog open targetType={reportTarget.type} targetId={reportTarget.id} onClose={() => setReportTarget(null)} /> : null}
     </section>
   );
 }

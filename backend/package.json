@@ -5,6 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "tsx src/cli.ts",
+    "admin:create": "tsx scripts/create-platform-admin.ts",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:unit": "vitest run tests/unit",
@@ -13,7 +14,7 @@
     "test:qa:database": "vitest run tests/qa/database",
     "test:qa:report": "vitest run tests/qa/contract tests/qa/security --reporter=json --outputFile=../test-results/qa/vitest.json",
     "test:qa:database:report": "vitest run tests/qa/database --reporter=json --outputFile=../test-results/qa/database.json",
-    "lint": "eslint src tests"
+    "lint": "eslint src scripts tests"
   },
   "dependencies": {
     "@campusconnection/shared": "0.1.0",

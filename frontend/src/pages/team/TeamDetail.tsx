@@ -33,6 +33,7 @@ import {
   updateTeamMemberRole,
 } from '../../features/collaboration/collaboration.api';
 import { search } from '../../features/discovery/discovery.api';
+import { AdminReportDialog } from '../admin/AdminReportDialog';
 
 type TeamTab = 'overview' | 'chat' | 'members' | 'manage';
 
@@ -154,6 +155,7 @@ export function TeamDetail({
 }) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TeamTab>('overview');
+  const [reportOpen, setReportOpen] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
   const [inviteSearch, setInviteSearch] = useState('');
   const [selectedInvitee, setSelectedInvitee] = useState<SearchResult | null>(null);
@@ -303,6 +305,7 @@ export function TeamDetail({
               <p className="mt-2 max-w-2xl text-sm leading-6 text-white/80">{item.description}</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setReportOpen(true)}>Report</Button>
               {item.membershipStatus === 'PENDING' ? (
                 <Button size="sm" variant="secondary" disabled>
                   Request pending
@@ -356,6 +359,7 @@ export function TeamDetail({
           </span>
         </div>
       </Card>
+      <AdminReportDialog open={reportOpen} targetType="TEAM" targetId={teamId} onClose={() => setReportOpen(false)} />
       {error ? (
         <ErrorState message={apiErrorMessage(error, 'Team action could not be completed.')} />
       ) : null}

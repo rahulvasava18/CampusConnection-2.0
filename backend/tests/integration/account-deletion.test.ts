@@ -14,6 +14,7 @@ vi.mock('../../src/modules/identity/security/auth.middleware', () => ({
     };
     next();
   },
+  requireRole: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
 const authService = {} as AuthService;

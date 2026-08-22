@@ -8,6 +8,7 @@ import { AuthRoutes } from './routes/AuthRoutes';
 import { AppRoutes } from './routes/AppRoutes';
 import { routeFromPath, routePaths, type RouteId } from './lib/navigation';
 import { useAppStore } from './store/app-store';
+import { AdminRoutes } from './pages/admin/AdminRoutes';
 
 export function App() {
   const authStatus = useAuthStore((state) => state.status);
@@ -35,8 +36,10 @@ export function App() {
     setRoute(initialRoute);
     setActiveSection(initialRoute);
     const dynamicProfilePath = /^\/users\/[^/]+\/profile$/.test(window.location.pathname);
+    const dynamicAdminPath = /^\/admin\/users\/[^/]+$|^\/admin\/reports\/[^/]+$/.test(window.location.pathname);
     if (
       !dynamicProfilePath &&
+      !dynamicAdminPath &&
       routePaths[initialRoute] &&
       window.location.pathname !== routePaths[initialRoute]
     )
@@ -72,6 +75,9 @@ export function App() {
     if (window.location.pathname !== targetPath) window.history.pushState({}, '', targetPath);
     if (isNavigationOpen) toggleNavigation();
   };
+
+  if (route.toString().startsWith('admin'))
+    return <AdminRoutes user={resolvedUser} onNavigate={navigate} onSignOut={() => void logout()} />;
 
   return (
     <AppLayout user={resolvedUser} onNavigate={navigate}>

@@ -25,6 +25,7 @@ import {
   LoadingState,
   TextareaField,
 } from '../../components/ui';
+import { AdminReportDialog } from '../admin/AdminReportDialog';
 
 export function EventDetail({
   eventId,
@@ -35,6 +36,7 @@ export function EventDetail({
 }) {
   const client = useQueryClient();
   const userId = useAuthStore((state) => state.user?.id);
+  const [reportOpen, setReportOpen] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editCategory, setEditCategory] = useState('');
@@ -144,6 +146,7 @@ export function EventDetail({
               <p className="mt-2 text-sm font-semibold text-brand-700">{item.category}</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={() => setReportOpen(true)}>Report</Button>
               {isOrganizer ? (
                 <Button
                   variant="secondary"
@@ -235,6 +238,7 @@ export function EventDetail({
           </div>
         </div>
       </Card>
+      <AdminReportDialog open={reportOpen} targetType="EVENT" targetId={eventId} onClose={() => setReportOpen(false)} />
       {actionError ? (
         <ErrorState
           message={apiErrorMessage(actionError, 'Event action could not be completed.')}

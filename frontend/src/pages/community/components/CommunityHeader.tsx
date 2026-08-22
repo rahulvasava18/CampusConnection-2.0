@@ -10,6 +10,7 @@ export function CommunityHeader({
   onCreateDiscussion,
   onManage,
   onInvite,
+  onReport,
   busy = false,
 }: {
   community: CommunityView;
@@ -19,6 +20,7 @@ export function CommunityHeader({
   onCreateDiscussion: () => void;
   onManage?: (() => void) | undefined;
   onInvite?: (() => void) | undefined;
+  onReport?: (() => void) | undefined;
   busy?: boolean;
 }) {
   return (
@@ -43,6 +45,7 @@ export function CommunityHeader({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {onReport ? <Button size="sm" variant="ghost" onClick={onReport}>Report</Button> : null}
             {community.membershipStatus === 'PENDING' ? (
               <Button size="sm" variant="secondary" disabled>
                 Request pending

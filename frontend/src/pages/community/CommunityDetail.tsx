@@ -45,6 +45,7 @@ import {
 } from '../../features/community/community.api';
 import { search } from '../../features/discovery/discovery.api';
 import { ApiRequestError } from '../../lib/api-state';
+import { AdminReportDialog } from '../admin/AdminReportDialog';
 
 type CommunityTab = 'posts' | 'chat' | 'members' | 'about' | 'manage';
 
@@ -62,6 +63,7 @@ export function CommunityDetail({
   const [selectedInvitee, setSelectedInvitee] = useState<SearchResult | null>(null);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const [reportMessage, setReportMessage] = useState<string | null>(null);
+  const [centralReportOpen, setCentralReportOpen] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editCategory, setEditCategory] = useState('');
@@ -262,8 +264,10 @@ export function CommunityDetail({
         onCreateDiscussion={() => setTab('posts')}
         onInvite={canAdmin ? () => setTab('manage') : undefined}
         onManage={canManage ? () => setTab('manage') : undefined}
+        onReport={() => setCentralReportOpen(true)}
         busy={membership.isPending}
       />
+      <AdminReportDialog open={centralReportOpen} targetType="COMMUNITY" targetId={communityId} onClose={() => setCentralReportOpen(false)} />
       {membership.error ||
       invite.error ||
       manageMember.error ||

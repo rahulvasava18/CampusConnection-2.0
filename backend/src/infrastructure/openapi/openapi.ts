@@ -175,6 +175,60 @@ export const openApiDocument = {
         },
       },
     },
+    '/admin/stats': {
+      get: {
+        summary: 'Return platform statistics for the platform administrator dashboard',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'range',
+            in: 'query',
+            schema: { type: 'string', enum: ['7d', '30d', '90d', '6m', '1y'], default: '30d' },
+          },
+        ],
+        responses: {
+          '200': { description: 'Dashboard statistics returned' },
+          '401': { description: 'Authentication required' },
+          '403': { description: 'Platform administrator role required' },
+        },
+      },
+    },
+    '/admin/users': {
+      get: {
+        summary: 'List and filter users for platform administration',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'status', in: 'query', schema: { type: 'string' } },
+          { name: 'sort', in: 'query', schema: { type: 'string', enum: ['createdAt', 'lastActive', 'activity', 'reports'] } },
+          { name: 'order', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'] } },
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', enum: [25, 50, 100] } },
+        ],
+        responses: { '200': { description: 'Users and pagination metadata returned' }, '401': { description: 'Authentication required' }, '403': { description: 'Platform administrator role required' } },
+      },
+    },
+    '/admin/users/{userId}': {
+      get: { summary: 'Inspect a user account and moderation overview', security: [{ bearerAuth: [] }], responses: { '200': { description: 'User overview returned' }, '404': { description: 'User not found' } } },
+      delete: { summary: 'Soft-delete a user account', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Account soft-deleted' }, '403': { description: 'Administrator target protected' } } },
+    },
+    '/admin/users/{userId}/activity': { get: { summary: 'List a user activity timeline', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Activity returned' } } } },
+    '/admin/users/{userId}/content': { get: { summary: 'List content created by a user', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Content returned' } } } },
+    '/admin/users/{userId}/reports': { get: { summary: 'List reports about and created by a user', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Reports returned' } } } },
+    '/admin/users/{userId}/moderation-history': { get: { summary: 'List moderation history for a user', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Moderation history returned' } } } },
+    '/reports': { post: { summary: 'Submit a report about a user or platform content', security: [{ bearerAuth: [] }], responses: { '201': { description: 'Report created' }, '409': { description: 'Duplicate open report' } } } },
+    '/admin/reports': { get: { summary: 'List and filter the centralized moderation queue', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Reports returned' } } } },
+    '/admin/reports/{reportId}': { get: { summary: 'Inspect a report and related history', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Report detail returned' } } }, patch: { summary: 'Update report review status', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Report updated' } } } },
+    '/admin/content/{targetType}': { get: { summary: 'List reportable content for moderation', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Content returned' } } } },
+    '/admin/content/{targetType}/{contentId}/moderate': { post: { summary: 'Apply a centralized moderation action', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Moderation action recorded' } } } },
+    '/admin/audit-logs': { get: { summary: 'Read append-only administrative audit logs', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Audit logs returned' } } } },
+    '/admin/notifications': { get: { summary: 'List grouped administrator notifications', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Notifications returned' } } } },
+    '/admin/analytics': { get: { summary: 'Return MongoDB-backed platform analytics', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Analytics returned' } } } },
+    '/admin/moderation': { get: { summary: 'Return suspicious activity signals for investigation', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Signals returned' } } } },
+    '/admin/users/{userId}/warn': { post: { summary: 'Issue a user warning', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Warning recorded' }, '403': { description: 'Administrator target protected' } } } },
+    '/admin/users/{userId}/suspend': { post: { summary: 'Suspend a user for a validated duration', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Suspension recorded' }, '409': { description: 'Account state conflict' } } } },
+    '/admin/users/{userId}/ban': { post: { summary: 'Ban a user and revoke active sessions', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Ban recorded' }, '403': { description: 'Administrator target protected' } } } },
+    '/admin/users/{userId}/restore': { post: { summary: 'Restore a suspended or banned user', security: [{ bearerAuth: [] }], responses: { '200': { description: 'Access restored' }, '409': { description: 'Account state conflict' } } } },
     '/me': {
       get: {
         summary: 'Get the current user',

@@ -14,6 +14,7 @@
     "dev:api": "npm run dev:shared && npm run dev -w @campusconnection/backend -- api",
     "dev:realtime": "npm run dev:shared && npm run dev -w @campusconnection/backend -- realtime",
     "dev:web": "npm run dev -w @campusconnection/frontend",
+    "admin:create": "npm run admin:create -w @campusconnection/backend",
     "typecheck": "npm run build -w @campusconnection/shared && npm run typecheck -w @campusconnection/backend && npm run typecheck -w @campusconnection/frontend",
     "lint": "eslint .",
     "test": "npm run test:unit -w @campusconnection/backend && npm run test:integration -w @campusconnection/backend",

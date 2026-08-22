@@ -34,7 +34,23 @@ export type RouteId =
   | 'projectCreate'
   | 'projectDetail'
   | 'eventCreate'
-  | 'eventDetail';
+  | 'eventDetail'
+  | 'admin'
+  | 'adminUsers'
+  | 'adminUserDetail'
+  | 'adminAnalytics'
+  | 'adminReports'
+  | 'adminReportDetail'
+  | 'adminPosts'
+  | 'adminComments'
+  | 'adminTeams'
+  | 'adminCommunities'
+  | 'adminEvents'
+  | 'adminModeration'
+  | 'adminAuditLogs'
+  | 'adminNotifications'
+  | 'adminSettings'
+  | 'adminLogin';
 
 export type NavItem = {
   id: RouteId;
@@ -56,6 +72,19 @@ export const routePaths: Partial<Record<RouteId, string>> = {
   profile: '/profile',
   settings: '/settings',
   resources: '/resources',
+  admin: '/admin',
+  adminUsers: '/admin/users',
+  adminAnalytics: '/admin/analytics',
+  adminReports: '/admin/reports',
+  adminPosts: '/admin/posts',
+  adminComments: '/admin/comments',
+  adminTeams: '/admin/teams',
+  adminCommunities: '/admin/communities',
+  adminEvents: '/admin/events',
+  adminModeration: '/admin/moderation',
+  adminAuditLogs: '/admin/audit-logs',
+  adminNotifications: '/admin/notifications',
+  adminSettings: '/admin/settings',
 };
 
 export const primaryNav: NavItem[] = [
@@ -88,6 +117,22 @@ export function routeFromPath(pathname: string): RouteId {
   if (/^\/teams\/[^/]+$/.test(cleanPath)) return 'teamDetail';
   if (/^\/projects\/[^/]+$/.test(cleanPath)) return 'projectDetail';
   if (/^\/events\/[^/]+$/.test(cleanPath)) return 'eventDetail';
+  if (cleanPath === '/admin/login') return 'adminLogin';
+  if (cleanPath === '/admin/users') return 'adminUsers';
+  if (/^\/admin\/users\/[^/]+$/.test(cleanPath)) return 'adminUserDetail';
+  if (/^\/admin\/reports\/[^/]+$/.test(cleanPath)) return 'adminReportDetail';
+  if (cleanPath === '/admin/analytics') return 'adminAnalytics';
+  if (cleanPath === '/admin/reports') return 'adminReports';
+  if (cleanPath === '/admin/posts') return 'adminPosts';
+  if (cleanPath === '/admin/comments') return 'adminComments';
+  if (cleanPath === '/admin/teams') return 'adminTeams';
+  if (cleanPath === '/admin/communities') return 'adminCommunities';
+  if (cleanPath === '/admin/events') return 'adminEvents';
+  if (cleanPath === '/admin/moderation') return 'adminModeration';
+  if (cleanPath === '/admin/audit-logs') return 'adminAuditLogs';
+  if (cleanPath === '/admin/notifications') return 'adminNotifications';
+  if (cleanPath === '/admin/settings') return 'adminSettings';
+  if (cleanPath === '/admin' || cleanPath.startsWith('/admin/')) return 'admin';
   const match = (Object.entries(routePaths) as Array<[RouteId, string]>).find(
     ([, path]) => path === cleanPath,
   );

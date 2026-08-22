@@ -3,6 +3,7 @@ import { AppError } from '../../../shared/errors/app-error';
 import { verifyAccessToken } from './jwt.service';
 import { UserRepository } from '../infrastructure/identity.repositories';
 import { toUserView } from '../application/user.mapper';
+import { normalizeExpiredSuspension } from './account-state';
 
 const userRepository = new UserRepository();
 
@@ -14,6 +15,7 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
     const token = authorization.slice('Bearer '.length);
     const claims = verifyAccessToken(token);
     const user = await userRepository.findById(claims.sub);
+    if (user) await normalizeExpiredSuspension(user);
     if (!user || ['BANNED', 'DELETED', 'SUSPENDED'].includes(user.accountState))
       throw new AppError(
         'ACCOUNT_UNAVAILABLE',

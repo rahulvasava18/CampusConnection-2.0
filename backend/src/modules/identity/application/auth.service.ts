@@ -22,6 +22,7 @@ import {
   normalizeUsername,
 } from '../security/credential-normalization';
 import { signAccessToken } from '../security/jwt.service';
+import { normalizeExpiredSuspension } from '../security/account-state';
 import {
   EmailVerificationRepository,
   PendingSignupRepository,
@@ -189,7 +190,7 @@ export class AuthService {
               'This verification link is invalid or expired.',
               400,
             );
-          this.assertCanAuthenticate(legacyUser);
+          await this.assertCanAuthenticate(legacyUser);
           legacyUser.verificationStatus = 'VERIFIED';
           if (legacyUser.accountState === 'PENDING_VERIFICATION')
             legacyUser.accountState = 'ACTIVE';
@@ -325,7 +326,7 @@ export class AuthService {
         'This email is already verified. You can log in.',
         409,
       );
-    this.assertCanAuthenticate(user);
+    await this.assertCanAuthenticate(user);
     const token = createOpaqueToken(32);
     const correlationId = meta.correlationId ?? meta.requestId ?? randomUUID();
     await this.transaction(async (session) => {
@@ -428,7 +429,7 @@ export class AuthService {
           await existing.save({ session });
         });
       }
-      this.assertCanAuthenticate(existing);
+      await this.assertCanAuthenticate(existing);
       const result = await this.createSession(existing, meta);
       await this.recordAudit('GOOGLE_LOGIN_SUCCESS', existing._id, meta);
       return { onboardingRequired: false, ...result };
@@ -519,7 +520,7 @@ export class AuthService {
     const valid = await verifyPassword(password, user?.passwordHash);
     if (!user || !valid)
       throw new AppError('INVALID_CREDENTIALS', 'Invalid username/email or password.', 401);
-    this.assertCanAuthenticate(user);
+    await this.assertCanAuthenticate(user);
     if (user.verificationStatus !== 'VERIFIED')
       throw new AppError('EMAIL_NOT_VERIFIED', 'Please verify your email before signing in.', 403);
     const result = await this.createSession(user, meta);
@@ -563,7 +564,7 @@ export class AuthService {
     const user = await this.users.findById(existing.userId);
     if (!user)
       throw new AppError('REFRESH_TOKEN_INVALID', 'The session is invalid or expired.', 401);
-    this.assertCanAuthenticate(user);
+    await this.assertCanAuthenticate(user);
     const result = await this.transaction(async (session) => {
       const newRefreshToken = createOpaqueToken();
       const replacement = await this.sessions.create(
@@ -768,7 +769,8 @@ export class AuthService {
     return this.googleOAuth ?? createGoogleOAuthClient();
   }
 
-  private assertCanAuthenticate(user: UserDocument): void {
+  private async assertCanAuthenticate(user: UserDocument): Promise<void> {
+    await normalizeExpiredSuspension(user);
     const blocked: AccountState[] = ['BANNED', 'DELETED', 'SUSPENDED'];
     if (blocked.includes(user.accountState))
       throw new AppError('ACCOUNT_UNAVAILABLE', 'This account cannot authenticate.', 403);

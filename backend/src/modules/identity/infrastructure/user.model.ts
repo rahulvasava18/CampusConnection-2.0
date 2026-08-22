@@ -29,6 +29,13 @@ export interface UserDocument extends Document {
   preferences?: UserPreferences;
   deactivatedAt?: Date;
   deletedAt?: Date;
+  suspendedAt?: Date;
+  suspendedUntil?: Date;
+  suspensionReason?: string;
+  bannedAt?: Date;
+  banReason?: string;
+  deletedBy?: string;
+  deletionReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -100,6 +107,13 @@ const userSchema = new Schema<UserDocument>(
     },
     deactivatedAt: { type: Date },
     deletedAt: { type: Date },
+    suspendedAt: { type: Date },
+    suspendedUntil: { type: Date },
+    suspensionReason: { type: String, trim: true, maxlength: 500 },
+    bannedAt: { type: Date },
+    banReason: { type: String, trim: true, maxlength: 500 },
+    deletedBy: { type: String },
+    deletionReason: { type: String, trim: true, maxlength: 500 },
   },
   { collection: 'users', timestamps: true },
 );

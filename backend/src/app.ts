@@ -22,11 +22,24 @@ import { createIntelligenceRouter } from './modules/intelligence/interfaces/inte
 import { createNotificationRouter } from './modules/notifications/interfaces/notification.routes';
 import { createSettingsRouter } from './modules/settings/interfaces/settings.routes';
 import { createProfileRouter } from './modules/profile/interfaces/profile.routes';
+import { createAdminRouter } from './modules/admin/interfaces/admin.routes';
+import {
+  createAdminControlRouter,
+  createReportRouter,
+} from './modules/admin/interfaces/admin-control.routes';
+import type { AdminService } from './modules/admin/application/admin.service';
+import type { AdminUserService } from './modules/admin/application/admin-user.service';
+import type { AdminControlService } from './modules/admin/application/admin-control.service';
+import type { AdminAnalyticsService } from './modules/admin/application/admin-analytics.service';
 
 export interface AppDependencies {
   healthService?: HealthService;
   authService?: AuthService;
   accountDeletionService?: Pick<AccountDeletionService, 'deleteAccount'>;
+  adminService?: AdminService;
+  adminUserService?: AdminUserService;
+  adminControlService?: AdminControlService;
+  adminAnalyticsService?: AdminAnalyticsService;
 }
 
 export function createApp(dependencies: AppDependencies = {}): Express {
@@ -85,12 +98,15 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   apiRouter.use('/auth', createAuthRouter(authService, accountDeletionService));
   apiRouter.use(createMeRouter(authService));
   apiRouter.use(createOpenApiRouter());
+  apiRouter.use(createReportRouter(dependencies.adminControlService));
   apiRouter.use(createDiscoveryRouter());
   apiRouter.use(createCommunicationRouter());
   apiRouter.use('/recommendations', createIntelligenceRouter());
   apiRouter.use(createNotificationRouter());
   apiRouter.use(createSettingsRouter());
   apiRouter.use(createProfileRouter());
+  apiRouter.use('/admin', createAdminRouter(dependencies.adminService, dependencies.adminUserService));
+  apiRouter.use('/admin', createAdminControlRouter(dependencies.adminControlService, dependencies.adminAnalyticsService));
   apiRouter.use(createSocialRouter());
   apiRouter.use(createCollaborationRouter());
   app.use('/api', apiRouter);
